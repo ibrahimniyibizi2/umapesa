@@ -2,16 +2,14 @@ import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Heart } from 'lucide-react';
 import { useAuth } from '../../hooks/useAuth';
-import { uploadImage } from '@/utils/storage';
 
-export default function CreateCampaign() {
+const CreateCampaign = () => {
   const navigate = useNavigate();
-  useAuth(); // We still call the hook for its side effects
+  useAuth();
   const [loading, setLoading] = useState(false);
-  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string>('');
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
@@ -24,7 +22,7 @@ export default function CreateCampaign() {
     endDate: '',
     imageUrl: ''
   });
-
+  
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -33,109 +31,71 @@ export default function CreateCampaign() {
     }));
   };
 
-  const handleImageUpload = async (file: File) => {
-    if (!file) {
-      console.error('No file provided');
-      return;
-    }
-
-    console.log('File selected:', file.name, 'Type:', file.type, 'Size:', file.size);
-
-    if (!file.type.startsWith('image/')) {
-      const errorMsg = 'Please upload a valid image file (PNG, JPG, GIF)';
-      console.error(errorMsg);
-      setError(errorMsg);
-      return;
-    }
-
-    // Check file size (5MB max)
-    if (file.size > 5 * 1024 * 1024) {
-      const errorMsg = 'File size should be less than 5MB';
-      console.error(errorMsg);
-      setError(errorMsg);
-      return;
-    }
-
-    try {
-      setError('');
-      setIsUploading(true);
-      console.log('Starting image upload...');
-      
-      const imageUrl = await uploadImage(file);
-      console.log('Upload response:', { imageUrl });
-      
-      if (imageUrl) {
-        console.log('Image uploaded successfully, URL:', imageUrl);
-        setFormData(prev => ({ ...prev, imageUrl }));
-        // Create a preview URL from the file
-        const preview = URL.createObjectURL(file);
-        console.log('Created preview URL:', preview);
-        setPreviewUrl(preview);
-      }
-    } catch (error) {
-      console.error('Error in handleImageUpload:', error);
-      const errorMsg = error instanceof Error 
-        ? `Failed to upload image: ${error.message}` 
-        : 'An unknown error occurred during upload';
-      setError(errorMsg);
-    } finally {
-      setIsUploading(false);
-    }
-  };
-
-  const removeImage = () => {
-    setPreviewUrl('');
-    setFormData(prev => ({ ...prev, imageUrl: '' }));
-    setError('');
+  const handleClickUpload = () => {
+    fileInputRef.current?.click();
   };
 
   const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      handleImageUpload(file);
-      // Reset the input value to allow selecting the same file again
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleClickUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    if (file) handleFile(file);
   };
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(true);
   };
 
-  const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const handleDragLeave = () => {
     setIsDragging(false);
   };
 
   const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    e.stopPropagation();
     setIsDragging(false);
-    
     const file = e.dataTransfer.files?.[0];
-    if (file) handleImageUpload(file);
+    if (file) handleFile(file);
   };
 
-  // Adding proper types to parameters and variables
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
+  const handleFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please upload a valid image file (PNG, JPG, GIF)');
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setError('File size must be under 5MB');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const preview = reader.result as string;
+      setPreviewUrl(preview);
+      setFormData(prev => ({ ...prev, imageUrl: preview }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const removeImage = () => {
+    setPreviewUrl(null);
+    setFormData(prev => ({ ...prev, imageUrl: '' }));
+    setError('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
+    setError('');
+    
     try {
-      // Submit logic here
+      // TODO: Implement actual form submission
+      console.log('Form submitted:', formData);
       setSuccess(true);
-    } catch (error) {
-      console.error('Error creating campaign:', error);
+    } catch (err) {
+      console.error('Error creating campaign:', err);
       setError('Failed to create campaign. Please try again.');
     } finally {
       setLoading(false);
@@ -151,23 +111,13 @@ export default function CreateCampaign() {
               <CheckCircle className="h-6 w-6 text-green-600" />
             </div>
             <h2 className="text-2xl font-bold text-gray-900 mb-2">Campaign Created Successfully!</h2>
-            <p className="text-gray-600 mb-6">
-              Your fundraising campaign has been created and is now live. Share it with your network to start receiving donations.
-            </p>
-            <div className="space-y-3">
-              <button
-                onClick={() => navigate('/fundraising')}
-                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-              >
-                View All Campaigns
-              </button>
-              <button
-                onClick={() => navigate('/dashboard')}
-                className="w-full text-blue-600 hover:text-blue-700"
-              >
-                Go to Dashboard
-              </button>
-            </div>
+            <p className="text-gray-600 mb-6">Thank you for creating your fundraising campaign.</p>
+            <button
+              onClick={() => navigate('/fundraising')}
+              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Back to Fundraising
+            </button>
           </div>
         </div>
       </div>
@@ -193,8 +143,7 @@ export default function CreateCampaign() {
                   name="title"
                   value={formData.title}
                   onChange={handleChange}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="E.g., Help me pay for medical bills"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
               </div>
@@ -208,103 +157,74 @@ export default function CreateCampaign() {
                   value={formData.description}
                   onChange={handleChange}
                   rows={4}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Tell your story..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   required
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Withdrawal Number *
+                    Goal Amount *
                   </label>
                   <input
-                    type="tel"
-                    name="withdrawalNumber"
-                    value={formData.withdrawalNumber}
+                    type="number"
+                    name="goalAmount"
+                    value={formData.goalAmount}
                     onChange={handleChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    placeholder={formData.withdrawalMethod === 'mcel' ? '84xxxxxxx' : formData.withdrawalMethod === 'baton' ? '86xxxxxxx' : '85xxxxxxx'}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     required
                   />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Network Provider *
-                  </label>
-                  <select
-                    name="withdrawalMethod"
-                    value={formData.withdrawalMethod}
-                    onChange={handleChange}
-                    title="Select your network provider"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="vodacom">Vodacom Mozambique</option>
-                    <option value="ntm">MTN Rwanda</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Currency
+                    Currency *
                   </label>
                   <select
                     name="currency"
                     value={formData.currency}
                     onChange={handleChange}
-                    aria-label="Campaign currency"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
                   >
-                    <option value="MZN">MZN (Mozambican Metical)</option>
-                    <option value="RWF">RWF (Rwandan Franc)</option>
+                    <option value="MZN">MZN</option>
+                    <option value="RWF">RWF</option>
                   </select>
                 </div>
               </div>
 
-              {/* Campaign Image */}
               <div className="mt-8">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Campaign Image</h3>
                 
                 <div className="space-y-4">
                   <div className="flex items-center justify-center w-full">
-                  <div 
-                    className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'}`}
-                    onDragOver={handleDragOver}
-                    onDragLeave={handleDragLeave}
-                    onDrop={handleDrop}
-                    onClick={handleClickUpload}
-                  >
-                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                      {isUploading ? (
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mb-4"></div>
-                      ) : (
+                    <div 
+                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
+                        isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
+                      }`}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      onClick={handleClickUpload}
+                    >
+                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
                         <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
                           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
                         </svg>
-                      )}
-                      {isUploading ? (
-                        <p className="text-sm text-gray-500">Uploading...</p>
-                      ) : (
-                        <>
-                          <p className="mb-2 text-sm text-gray-500">
-                            <span className="font-semibold">Click to upload</span> or drag and drop
-                          </p>
-                          <p className="text-xs text-gray-500">PNG, JPG, GIF (MAX. 5MB)</p>
-                        </>
-                      )}
+                        <p className="mb-2 text-sm text-gray-500">
+                          <span className="font-semibold">Click to upload</span> or drag and drop
+                        </p>
+                        <p className="text-xs text-gray-500">PNG, JPG, GIF (MAX. 5MB)</p>
+                      </div>
+                      <input 
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileInputChange}
+                        className="hidden"
+                      />
                     </div>
-                    <input 
-                      ref={fileInputRef}
-                      id="dropzone-file"
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileInputChange}
-                      className="hidden"
-                      disabled={isUploading}
-                    />
                   </div>
-                </div>
 
                   {previewUrl && (
                     <div className="relative w-full h-32 rounded-lg overflow-hidden">
@@ -315,28 +235,28 @@ export default function CreateCampaign() {
                         onClick={removeImage}
                         className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
                       >
-                        Remove
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                        </svg>
                       </button>
                     </div>
-                  )}
-
-                  {error && (
-                    <p className="text-red-600 text-sm mt-2">
-                      {error}
-                    </p>
                   )}
                 </div>
               </div>
 
-              <div className="mt-6">
-                <button
-                  type="submit"
-                  className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                  disabled={loading}
-                >
-                  {loading ? 'Creating Campaign...' : 'Create Campaign'}
-                </button>
-              </div>
+              {error && (
+                <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                disabled={loading}
+              >
+                {loading ? 'Creating Campaign...' : 'Create Campaign'}
+              </button>
             </div>
           </form>
         </div>
@@ -364,4 +284,6 @@ export default function CreateCampaign() {
       </div>
     </div>
   );
-}
+};
+
+export default CreateCampaign;
