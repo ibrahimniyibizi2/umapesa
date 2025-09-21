@@ -8,7 +8,9 @@ import { processNhongaWebhook, createNhongaPayment, extractPhoneFromSMS, validat
 import { payoutQueue, payoutWorker } from './jobs/payoutJob.js';
 import { getFlutterwaveBalance } from './services/flutterwaveService.js';
 import { convertCurrency } from './services/currencyService.js';
-
+import cors from 'cors';
+import sqlite3 from 'sqlite3';
+import { fileURLToPath } from 'url';
 
 dotenv.config();
 
@@ -19,6 +21,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // CORS middleware
+app.use(cors());
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -462,4 +465,59 @@ process.on('SIGINT', async () => {
   await payoutWorker.close();
   await payoutQueue.close();
   process.exit(0);
+});
+
+// Settings routes
+import settingsRouter from "./server-settings.js";
+app.use("/api", settingsRouter);
+
+// Ensure data directory exists
+const DATA_DIR = path.join(process.cwd(), 'backend', 'data');
+const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
+
+// Create data directory if it doesn't exist
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+
+// Load settings or create default
+const loadSettings = () => {
+  try {
+    if (fs.existsSync(SETTINGS_FILE)) {
+      const data = fs.readFileSync(SETTINGS_FILE, 'utf-8');
+      return JSON.parse(data);
+    }
+  } catch (error) {
+    console.error('Error loading settings:', error);
+  }
+  
+  // Default settings
+  return {
+    notifications: { email: true, push: true, sms: false, marketing: false },
+    privacy: { profileVisibility: "friends", showOnlineStatus: true, allowMessages: true },
+    security: { twoFactor: false, biometric: false, sessionTimeout: "30" },
+    preferences: { language: "en", currency: "MZN", theme: "light", timezone: "Africa/Maputo" }
+  };
+};
+
+// GET settings
+app.get("/api/settings", (req, res) => {
+  try {
+    const settings = loadSettings();
+    res.json(settings);
+  } catch (error) {
+    console.error('Error getting settings:', error);
+    res.status(500).json({ error: 'Failed to load settings' });
+  }
+});
+
+// POST settings
+app.post("/api/settings", (req, res) => {
+  try {
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(req.body, null, 2));
+    res.json({ success: true, message: "Settings saved successfully!" });
+  } catch (error) {
+    console.error('Error saving settings:', error);
+    res.status(500).json({ success: false, error: 'Failed to save settings' });
+  }
 });

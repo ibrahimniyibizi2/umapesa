@@ -42,7 +42,8 @@ export default function Profile() {
         setError('Failed to update profile. Please try again.');
       }
     } catch (error) {
-      setError('An error occurred. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+      setError(`An error occurred: ${errorMessage}`);
     } finally {
       setLoading(false);
     }

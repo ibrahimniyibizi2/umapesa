@@ -201,7 +201,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         const newCampaign: Campaign = {
           ...data,
           id: result.campaignId,
-          creatorId: user.id,
+          creatorId: user.id.toString(),
           creatorName: user.firstName,
           raisedAmount: 0,
           startDate: new Date().toISOString(),
@@ -256,7 +256,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         const newContribution: Contribution = {
           id: result.contributionId,
           campaignId,
-          contributorId: user.id,
+          contributorId: user.id.toString(),
           contributorName: data.anonymous ? 'Anonymous' : (user.firstName || 'Anonymous'),
           amount: data.amount,
           message: data.message,
@@ -350,7 +350,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         convertedAmount: amount,
         convertedCurrency: data.currency,
         exchangeRate: data.currency === 'MZN' ? exchangeRates.MZN_to_RWF : exchangeRates.RWF_to_MZN,
-        senderId: user.id,
+        senderId: user.id.toString(),
         reference,
         paymentId: '',
         paymentMethod: 'card',

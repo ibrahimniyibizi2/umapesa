@@ -1,0 +1,37 @@
+{
+  "appName": "Umapesa",
+  "version": "1.0.0",
+  "maintenanceMode": false,
+  "currency": "MZN",
+  "minContributionAmount": 10,
+  "maxContributionAmount": 10000,
+  "transactionFeePercentage": 2.5,
+  "kycRequired": true,
+  "defaultCountry": "Mozambique",
+  "supportedCountries": ["Mozambique", "South Africa", "Zimbabwe"],
+  "contactEmail": "support@umapesa.com",
+  "termsAndConditionsUrl": "https://umapesa.com/terms",
+  "privacyPolicyUrl": "https://umapesa.com/privacy",
+  "socialMedia": {
+    "facebook": "https://facebook.com/umapesa",
+    "twitter": "https://twitter.com/umapesa",
+    "instagram": "https://instagram.com/umapesa"
+  },
+  "features": {
+    "campaigns": true,
+    "p2pTransfers": true,
+    "withdrawals": true,
+    "notifications": true
+  },
+  "security": {
+    "passwordMinLength": 8,
+    "require2FA": false,
+    "sessionTimeout": 30,
+    "maxLoginAttempts": 5
+  },
+  "api": {
+    "baseUrl": "https://api.umapesa.com/v1",
+    "timeout": 30000
+  },
+  "lastUpdated": "2025-09-22T01:26:11+02:00"
+}
