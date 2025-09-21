@@ -1,7 +1,13 @@
 import { User, Settings, LogOut, CreditCard, Bell, HelpCircle } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, Outlet, useLocation } from 'react-router-dom';
 
 const ProfilePage = () => {
+  const location = useLocation();
+  
+  // If we're on a nested route, only render the Outlet
+  if (location.pathname !== '/profile') {
+    return <Outlet />;
+  }
   return (
     <div className="p-4">
       <div className="max-w-2xl mx-auto">

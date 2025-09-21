@@ -39,13 +39,13 @@ export default function Menu() {
         {
           icon: <CreditCard className="w-5 h-5" />,
           label: 'Payment Methods',
-          path: '/payment-methods',
+          path: '/profile/payment-methods',
           description: 'Manage your saved payment methods'
         },
         {
           icon: <Bell className="w-5 h-5" />,
           label: 'Notifications',
-          path: '/notifications',
+          path: '/profile/notifications',
           description: 'Configure notification preferences'
         },
         {

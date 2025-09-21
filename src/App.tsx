@@ -16,6 +16,7 @@ import Menu from './pages/Menu/Menu';
 import TransactionHistory from './pages/Transfer/TransactionHistory';
 import PaymentMethods from './pages/PaymentMethods/PaymentMethods';
 import Notifications from './pages/Notifications/Notifications';
+import Settings from './pages/Settings/Settings';
 import Help from './pages/Help/Help';
 import Support from './pages/Support/Support';
 import Security from './pages/Security/Security';
@@ -70,15 +71,19 @@ function AppContent() {
         </ProtectedRoute>
       }>
         <Route path="/" element={<Homepage />} />
-        <Route path="/send" element={<SendMoney />} />
+        <Route path="/send-money" element={<SendMoney />} />
+        <Route path="/send" element={<Navigate to="/send-money" replace />} />
         <Route path="/fundraising" element={<Fundraising />} />
+        <Route path="/fundraise" element={<Navigate to="/fundraising" replace />} />
         <Route path="/create-campaign" element={<CreateCampaign />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/profile" element={<ProfilePage />}>
+          <Route path="payment-methods" element={<PaymentMethods />} />
+          <Route path="notifications" element={<Notifications />} />
+          <Route path="settings" element={<Settings />} />
+        </Route>
         <Route path="/menu" element={<Menu />} />
         
         {/* Menu Item Routes */}
-        <Route path="/payment-methods" element={<PaymentMethods />} />
-        <Route path="/notifications" element={<Notifications />} />
         <Route path="/transaction-history" element={<TransactionHistory />} />
         <Route path="/exchange-rates" element={<ExchangeRates />} />
         <Route path="/help" element={<Help />} />
