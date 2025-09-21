@@ -1,6 +1,31 @@
 // Demo API Service - No real backend calls
 const API_BASE_URL = '/api';
 
+// Define Transaction interface
+export interface Transaction {
+  id: string;
+  senderId: string;
+  recipientEmail: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientCountry: 'mozambique' | 'rwanda';
+  amount: number;
+  currency: 'MZN' | 'RWF';
+  convertedAmount: number;
+  convertedCurrency: 'MZN' | 'RWF';
+  exchangeRate: number;
+  fee: number;
+  totalAmount: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  type: 'send' | 'receive';
+  createdAt: string;
+  completedAt?: string;
+  reference: string;
+  description?: string;
+  paymentId?: string;
+  paymentMethod?: string;
+}
+
 class ApiService {
   private static getAuthHeaders(): HeadersInit {
     const token = localStorage.getItem('umapesa_token');
@@ -11,10 +36,22 @@ class ApiService {
   }
 
   private static async handleResponse(response: Response) {
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (error) {
+      console.error('Failed to parse JSON response:', error);
+      throw new Error('Invalid response from server');
+    }
     
     if (!response.ok) {
-      throw new Error(data.message || 'API request failed');
+      console.error('API Error:', {
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        error: data.message || 'Unknown error'
+      });
+      throw new Error(data.message || `API request failed with status ${response.status}`);
     }
     
     return data;
@@ -99,23 +136,46 @@ class ApiService {
   }
 
   // Transaction endpoints
-  static async createTransaction(transactionData: any) {
-    const response = await fetch(`${API_BASE_URL}/transactions`, {
-      method: 'POST',
-      headers: this.getAuthHeaders(),
-      body: JSON.stringify(transactionData)
-    });
-    
-    return await this.handleResponse(response);
+  static async createTransaction(transactionData: Omit<Transaction, 'id' | 'status' | 'createdAt' | 'reference' | 'type'>) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/transactions`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(transactionData)
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to create transaction: ${response.statusText}`);
+      }
+      
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.error('Failed to create transaction:', error);
+      throw error; // Re-throw to be handled by the caller
+    }
   }
 
   static async getUserTransactions() {
-    const response = await fetch(`${API_BASE_URL}/transactions`, {
-      method: 'GET',
-      headers: this.getAuthHeaders()
-    });
-    
-    return await this.handleResponse(response);
+    try {
+      const response = await fetch(`${API_BASE_URL}/transactions`, {
+        method: 'GET',
+        headers: this.getAuthHeaders()
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch transactions: ${response.statusText}`);
+      }
+      
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.error('Failed to fetch transactions, returning empty array:', error);
+      // Return empty array if API call fails
+      return {
+        success: true,
+        transactions: [],
+        isFallback: true
+      };
+    }
   }
 
   static async updateTransactionStatus(transactionId: string, status: string) {
@@ -224,14 +284,30 @@ class ApiService {
     };
   }
 
-  // Exchange rates endpoint
+  // Exchange rates endpoint with fallback
   static async getExchangeRates() {
-    const response = await fetch(`${API_BASE_URL}/exchange-rates`, {
-      method: 'GET',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    
-    return await this.handleResponse(response);
+    try {
+      const response = await fetch(`${API_BASE_URL}/exchange-rates`, {
+        method: 'GET',
+        headers: this.getAuthHeaders()
+      });
+      
+      if (!response.ok) {
+        throw new Error(`Failed to fetch exchange rates: ${response.statusText}`);
+      }
+      
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.warn('Using fallback exchange rates due to error:', error);
+      // Return fallback rates if API call fails
+      return {
+        success: true,
+        MZN_to_RWF: 18.5,
+        RWF_to_MZN: 0.054,
+        last_updated: new Date().toISOString(),
+        isFallback: true
+      };
+    }
   }
 
   // Logout

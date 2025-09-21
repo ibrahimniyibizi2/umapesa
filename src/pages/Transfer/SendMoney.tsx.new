@@ -1,0 +1,813 @@
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useFlutterwave, FlutterWaveResponse } from 'flutterwave-react-v3';
+import { 
+  Send, 
+  User, 
+  Mail, 
+  Phone, 
+  MapPin, 
+  DollarSign, 
+  ArrowRight,
+  AlertCircle,
+  CheckCircle,
+  Calculator
+} from 'lucide-react';
+import { useTransactions } from '../../contexts/TransactionContext';
+import { useAuth } from '../../hooks/useAuth';
+import { isPaymentEnabled } from '../../lib/config';
+
+interface CardData {
+  cardNumber: string;
+  cardHolder: string;
+  expiryDate: string;
+  cvv: string;
+}
+
+interface FormData {
+  recipientName: string;
+  recipientEmail: string;
+  recipientPhone: string;
+  recipientCountry: 'mozambique' | 'rwanda';
+  amount: string;
+  currency: 'MZN' | 'RWF';
+  description: string;
+}
+
+export default function SendMoney() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { calculateFee, convertCurrency, exchangeRates } = useTransactions();
+  
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [showMobileForm, setShowMobileForm] = useState(false);
+  const [selectedPaymentMethod] = useState('');
+  
+  const [cardData, setCardData] = useState<CardData>({
+    cardNumber: '',
+    cardHolder: '',
+    expiryDate: '',
+    cvv: ''
+  });
+  
+  const [mobileNumber, setMobileNumber] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  
+  const [formData, setFormData] = useState<FormData>({
+    recipientName: '',
+    recipientEmail: '',
+    recipientPhone: '',
+    recipientCountry: 'rwanda',
+    amount: '',
+    currency: 'MZN',
+    description: ''
+  });
+
+  const validateCardData = (data: CardData): boolean => {
+    return !!(data.cardNumber && data.cardHolder && data.expiryDate && data.cvv);
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (!paymentEnabled) {
+        setError('Payment service is currently unavailable. Please try again later or contact support.');
+        return;
+      }
+
+      setShowPaymentModal(true);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred. Please try again.';
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleCardSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    try {
+      if (!validateCardData(cardData)) {
+        throw new Error('Por favor, preencha todos os campos do cartão corretamente');
+      }
+
+      setShowCardForm(false);
+      
+      const config = getFlutterwaveConfig();
+      handleFlutterwavePayment({
+        ...config,
+        callback: (response: FlutterWaveResponse) => {
+          console.log('Flutterwave response:', response);
+          if (response.status === 'successful') {
+            setSuccess(true);
+            setTimeout(() => {
+              navigate('/transactions');
+            }, 3000);
+          } else {
+            setError('Pagamento não foi bem-sucedido. Por favor, tente novamente.');
+          }
+        },
+        onclose: () => {
+          console.log('Payment modal closed');
+        },
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao processar o pagamento';
+      setError(errorMessage);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePaymentTypeSelect = (type: 'card' | 'mobile') => {
+    setShowPaymentModal(false);
+    if (type === 'card') {
+      setShowCardForm(true);
+    } else {
+      setShowMobileForm(true);
+    }
+  };
+
+  const handleCardChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setCardData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const formatCardNumber = (value: string): string => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    const matches = v.match(/\d{4,16}/g);
+    const match = matches && matches[0] || '';
+    const parts = [];
+    
+    for (let i = 0, len = match.length; i < len; i += 4) {
+      parts.push(match.substring(i, i + 4));
+    }
+    
+    return parts.length ? parts.join(' ') : value;
+  };
+
+  const formatExpiryDate = (value: string): string => {
+    const v = value.replace(/\s+/g, '').replace(/[^0-9]/gi, '');
+    if (v.length >= 3) {
+      return `${v.substring(0, 2)}/${v.substring(2, 4)}`;
+    }
+    return v;
+  };
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
+  };
+
+  const amount = parseFloat(formData.amount) || 0;
+  const fee = calculateFee(amount);
+  const paymentMethodFee = 0; // Default fee, update if needed
+  const totalFee = fee + (amount * paymentMethodFee / 100);
+  const totalAmount = amount + totalFee;
+  const targetCurrency = formData.recipientCountry === 'mozambique' ? 'MZN' : 'RWF';
+  const convertedAmount = convertCurrency(amount, formData.currency, targetCurrency);
+  const exchangeRate = formData.currency === targetCurrency ? 1 : 
+    (formData.currency === 'MZN' ? exchangeRates.MZN_to_RWF : exchangeRates.RWF_to_MZN);
+
+  const getFlutterwaveConfig = () => ({
+    public_key: process.env.REACT_APP_FLUTTERWAVE_PUBLIC_KEY || 'FLWPUBK-TEST-SANDBOXDEMOKEY-X',
+    tx_ref: `UMP-${Date.now()}`,
+    amount: totalAmount,
+    currency: formData.currency,
+    payment_options: 'card',
+    customer: {
+      email: user?.email || 'customer@umapesa.com',
+      phone_number: user?.phone || '258841234567',
+      name: `${user?.firstName || 'Customer'} ${user?.lastName || 'Name'}`,
+    },
+    customizations: {
+      title: 'UmaPesa Money Transfer',
+      description: `Transfer to ${formData.recipientName}`,
+      logo: 'https://umapesa.com/logo.png',
+    },
+  });
+
+  const handleFlutterwavePayment = useFlutterwave(getFlutterwaveConfig());
+
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center py-12 px-4">
+        <div className="max-w-md w-full bg-white rounded-xl shadow-lg p-8 text-center">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-gray-900 mb-4">Transfer Initiated!</h2>
+          <p className="text-gray-600 mb-6">
+            Your transfer of {amount.toLocaleString()} {formData.currency} to {formData.recipientName} has been initiated successfully.
+          </p>
+          <button
+            onClick={() => navigate('/transactions')}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            View Transactions
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 py-8">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="mb-8">
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Send Money</h1>
+          <p className="text-gray-600">
+            Send money quickly and securely to friends and family across borders.
+          </p>
+        </div>
+
+        {/* Transfer Summary */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h2 className="text-xl font-semibold text-gray-900 mb-4 flex items-center">
+            <Calculator className="w-5 h-5 mr-2 text-blue-600" />
+            Transfer Summary
+          </h2>
+          
+          <div className="space-y-3">
+            <div className="flex justify-between items-center pb-2 border-b border-gray-100">
+              <span className="text-gray-600">You send</span>
+              <span className="font-medium text-gray-900">
+                {amount.toLocaleString()} {formData.currency}
+              </span>
+            </div>
+            
+            <div className="flex justify-between items-center text-sm text-gray-600">
+              <span>Transfer fee</span>
+              <span>{fee.toLocaleString()} {formData.currency}</span>
+            </div>
+            
+            {paymentMethodFee > 0 && (
+              <div className="flex justify-between items-center text-sm text-gray-600">
+                <span>Payment method fee ({paymentMethodFee}%)</span>
+                <span>{(amount * paymentMethodFee / 100).toLocaleString()} {formData.currency}</span>
+              </div>
+            )}
+            
+            <div className="pt-2 mt-2 border-t border-gray-200">
+              <div className="flex justify-between items-center font-medium">
+                <span>Total amount</span>
+                <span className="text-lg text-blue-600">
+                  {totalAmount.toLocaleString()} {formData.currency}
+                </span>
+              </div>
+            </div>
+            
+            {formData.currency !== targetCurrency && (
+              <div className="mt-3 pt-3 border-t border-gray-100 text-sm text-gray-500">
+                <div className="flex justify-between items-center">
+                  <span>Recipient gets</span>
+                  <span className="font-medium text-gray-700">
+                    {convertedAmount.toFixed(2)} {targetCurrency}
+                  </span>
+                </div>
+                <div className="text-xs text-right mt-1">
+                  Exchange rate: 1 {formData.currency} = {exchangeRate} {targetCurrency}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Transfer Form */}
+          <div className="lg:col-span-2">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              {error && (
+                <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4 flex items-center space-x-3">
+                  <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
+                  <p className="text-sm text-red-700">{error}</p>
+                </div>
+              )}
+
+              <form onSubmit={handleSubmit} className="space-y-6">
+                {/* Recipient Information */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <User className="w-5 h-5 mr-2" />
+                    Recipient Information
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="recipientName" className="block text-sm font-medium text-gray-700 mb-1">
+                        Full Name
+                      </label>
+                      <input
+                        type="text"
+                        id="recipientName"
+                        name="recipientName"
+                        value={formData.recipientName}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Enter recipient's full name"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                        <label htmlFor="recipientEmail" className="block text-sm font-medium text-gray-700 mb-1">
+                          Email Address
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Mail className="h-5 w-5 text-gray-400" />
+                          </div>
+                          <input
+                            type="email"
+                            id="recipientEmail"
+                            name="recipientEmail"
+                            value={formData.recipientEmail}
+                            onChange={handleChange}
+                            required
+                            className="w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Enter email"
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="recipientPhone" className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone Number
+                        </label>
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <Phone className="h-5 w-5 text-gray-400" />
+                          </div>
+                          <input
+                            type="tel"
+                            id="recipientPhone"
+                            name="recipientPhone"
+                            value={formData.recipientPhone}
+                            onChange={handleChange}
+                            required
+                            className="w-full pl-10 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Enter phone number"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="recipientCountry" className="block text-sm font-medium text-gray-700 mb-1">
+                        Destination Country
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <MapPin className="h-5 w-5 text-gray-400" />
+                        </div>
+                        <select
+                          id="recipientCountry"
+                          name="recipientCountry"
+                          value={formData.recipientCountry}
+                          onChange={handleChange}
+                          required
+                          className="w-full pl-10 pr-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                        >
+                          <option value="rwanda">Rwanda</option>
+                          <option value="mozambique">Mozambique</option>
+                        </select>
+                        <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                          <svg className="h-5 w-5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Transfer Details */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <DollarSign className="w-5 h-5 mr-2" />
+                    Transfer Amount
+                  </h3>
+                  <div className="space-y-4">
+                    <div>
+                      <label htmlFor="amount" className="block text-sm font-medium text-gray-700 mb-1">
+                        Amount to Send
+                      </label>
+                      <div className="relative">
+                        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                          <span className="text-gray-500">{formData.currency}</span>
+                        </div>
+                        <input
+                          type="number"
+                          id="amount"
+                          name="amount"
+                          value={formData.amount}
+                          onChange={handleChange}
+                          required
+                          min="1"
+                          step="0.01"
+                          className="w-full pl-16 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label htmlFor="currency" className="block text-sm font-medium text-gray-700 mb-1">
+                        Currency
+                      </label>
+                      <select
+                        id="currency"
+                        name="currency"
+                        value={formData.currency}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="MZN">Mozambican Metical (MZN)</option>
+                        <option value="RWF">Rwandan Franc (RWF)</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                        Description (Optional)
+                      </label>
+                      <textarea
+                        id="description"
+                        name="description"
+                        value={formData.description}
+                        onChange={handleChange}
+                        rows={3}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="Add a note about this transfer"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Terms and Conditions */}
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">
+                    Terms and Conditions
+                  </h3>
+                  <div className="space-y-2 text-sm text-gray-600 mb-4">
+                    <p>
+                      By proceeding, you agree to our{' '}
+                      <a href="/terms" className="text-blue-600 hover:underline">Terms of Service</a>,{' '}
+                      <a href="/privacy" className="text-blue-600 hover:underline">Privacy Policy</a>, and{' '}
+                      <a href="/security" className="text-blue-600 hover:underline">Security Policy</a>.
+                    </p>
+                    <p>
+                      Exchange rates and fees are subject to change. The final amount received may vary based on the exchange rate at the time of the transaction.
+                    </p>
+                  </div>
+                  <div className="flex items-center">
+                    <input
+                      type="checkbox"
+                      id="acceptTerms"
+                      checked={acceptedTerms}
+                      onChange={(e) => setAcceptedTerms(e.target.checked)}
+                      required
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                    />
+                    <label htmlFor="acceptTerms" className="ml-2 block text-sm text-gray-700">
+                      I have read and agree to the terms and conditions
+                    </label>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || !acceptedTerms}
+                  className="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 font-medium flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="w-5 h-5 mr-2" />
+                      Continue to Payment
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          </div>
+
+          {/* Transfer Summary Sidebar */}
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Transfer Details
+              </h3>
+              <div className="space-y-4">
+                <div className="flex justify-between">
+                  <span className="text-gray-600">You send</span>
+                  <span className="font-medium">
+                    {amount.toLocaleString()} {formData.currency}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm text-gray-500">
+                  <span>Transfer fee</span>
+                  <span>{fee.toLocaleString()} {formData.currency}</span>
+                </div>
+                {paymentMethodFee > 0 && (
+                  <div className="flex justify-between text-sm text-gray-500">
+                    <span>Payment method fee</span>
+                    <span>{(amount * paymentMethodFee / 100).toLocaleString()} {formData.currency}</span>
+                  </div>
+                )}
+                <div className="border-t border-gray-200 pt-3 mt-2">
+                  <div className="flex justify-between font-medium">
+                    <span>Total amount</span>
+                    <span className="text-blue-600">
+                      {totalAmount.toLocaleString()} {formData.currency}
+                    </span>
+                  </div>
+                </div>
+                {formData.currency !== targetCurrency && (
+                  <div className="pt-3 mt-3 border-t border-gray-100 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Recipient gets</span>
+                      <span className="font-medium">
+                        {convertedAmount.toFixed(2)} {targetCurrency}
+                      </span>
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">
+                      Exchange rate: 1 {formData.currency} = {exchangeRate} {targetCurrency}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                Recipient Details
+              </h3>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-sm text-gray-500">Name</p>
+                  <p className="font-medium">
+                    {formData.recipientName || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Email</p>
+                  <p className="font-medium">
+                    {formData.recipientEmail || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Phone</p>
+                  <p className="font-medium">
+                    {formData.recipientPhone || '—'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-500">Country</p>
+                  <p className="font-medium">
+                    {formData.recipientCountry === 'rwanda' ? 'Rwanda' : 'Mozambique'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Card Form Modal */}
+      {showCardForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Dados do Cartão
+            </h3>
+
+            <form onSubmit={handleCardSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Número do cartão
+                </label>
+                <input
+                  type="text"
+                  name="cardNumber"
+                  required
+                  maxLength={19}
+                  value={formatCardNumber(cardData.cardNumber)}
+                  onChange={(e) => handleCardChange({ ...e, target: { ...e.target, value: e.target.value.replace(/\s/g, '') } })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="1234 5678 9012 3456"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Nome do titular
+                </label>
+                <input
+                  type="text"
+                  name="cardHolder"
+                  required
+                  value={cardData.cardHolder}
+                  onChange={handleCardChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Nome como no cartão"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Data de validade
+                  </label>
+                  <input
+                    type="text"
+                    name="expiryDate"
+                    required
+                    maxLength={5}
+                    value={formatExpiryDate(cardData.expiryDate)}
+                    onChange={(e) => handleCardChange({ ...e, target: { ...e.target, value: e.target.value.replace(/\D/g, '') } })}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="MM/YY"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    CVV
+                  </label>
+                  <input
+                    type="text"
+                    name="cvv"
+                    required
+                    maxLength={4}
+                    value={cardData.cvv}
+                    onChange={handleCardChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="123"
+                  />
+                </div>
+              </div>
+
+              <div className="flex space-x-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setShowCardForm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Processando...' : 'Pagar com Cartão'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Method Selection Modal */}
+      {showPaymentModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Qual tipo de pagamento deseja utilizar?
+            </h3>
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => handlePaymentTypeSelect('card')}
+                className="w-full flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center mr-3">
+                    <svg className="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Cartão de Crédito/Débito</p>
+                    <p className="text-sm text-gray-500">Pague com seu cartão</p>
+                  </div>
+                </div>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handlePaymentTypeSelect('mobile')}
+                className="w-full flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 rounded-full bg-green-50 flex items-center justify-center mr-3">
+                    <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                    </svg>
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-gray-900">Mobile Money</p>
+                    <p className="text-sm text-gray-500">Pague com sua carteira móvel</p>
+                  </div>
+                </div>
+                <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowPaymentModal(false)}
+              className="w-full mt-6 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+            >
+              Voltar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Money Form */}
+      {showMobileForm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Mobile Money
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Insira o número de telefone associado à sua conta Mobile Money.
+            </p>
+            
+            <form onSubmit={handleMobileSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Número de telefone
+                </label>
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500">+258</span>
+                  </div>
+                  <input
+                    type="tel"
+                    value={mobileNumber}
+                    onChange={(e) => setMobileNumber(e.target.value.replace(/\D/g, ''))}
+                    className="w-full pl-16 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="84 123 4567"
+                    required
+                  />
+                </div>
+                <p className="mt-1 text-xs text-gray-500">
+                  Você receberá um pedido de confirmação no seu telefone.
+                </p>
+              </div>
+
+              <div className="flex space-x-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowMobileForm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading}
+                  className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                >
+                  {loading ? 'Processando...' : 'Continuar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

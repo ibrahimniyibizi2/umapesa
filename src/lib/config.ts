@@ -16,17 +16,30 @@ export const config = {
     anonKey: import.meta.env.VITE_SUPABASE_ANON_KEY
   },
   
+  // Flutterwave Configuration
+  flutterwave: {
+    publicKey: import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY || '',
+    secretKey: import.meta.env.VITE_FLUTTERWAVE_SECRET_KEY || '',
+    encryptionKey: import.meta.env.VITE_FLUTTERWAVE_ENCRYPTION_KEY || '',
+    environment: import.meta.env.VITE_FLUTTERWAVE_ENV || 'staging',
+    baseUrl: import.meta.env.VITE_FLUTTERWAVE_BASE_URL || 'https://api.flutterwave.com/v3/'
+  },
+  
   // Application Configuration
   app: {
     name: 'UmaPesa',
     version: '1.0.0',
-    environment: import.meta.env.MODE || 'production'
+    environment: import.meta.env.MODE || 'production',
+    baseUrl: import.meta.env.VITE_APP_URL || 'http://localhost:3000'
   }
 };
 
 // Validation function to ensure required environment variables are present
 export const validateConfig = () => {
   const requiredVars = [
+    'VITE_FLUTTERWAVE_PUBLIC_KEY',
+    'VITE_FLUTTERWAVE_SECRET_KEY',
+    'VITE_FLUTTERWAVE_ENCRYPTION_KEY',
     'VITE_SUPABASE_URL',
     'VITE_SUPABASE_ANON_KEY'
   ];
