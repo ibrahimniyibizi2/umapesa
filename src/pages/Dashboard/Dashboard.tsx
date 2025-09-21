@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { useTransactions } from '../../contexts/TransactionContext';
+import { useTransactions } from '../../hooks/useTransactions';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -23,11 +23,11 @@ export default function Dashboard() {
 
   const totalSent = userTransactions
     .filter(t => t.type === 'send' && t.status === 'completed')
-    .reduce((sum, t) => sum + t.totalAmount, 0);
+    .reduce((sum, t) => sum + (t.totalAmount || 0), 0);
 
   const totalReceived = transactions
     .filter(t => t.recipientEmail === user?.email && t.status === 'completed')
-    .reduce((sum, t) => sum + t.convertedAmount, 0);
+    .reduce((sum, t) => sum + (t.convertedAmount || 0), 0);
 
   const totalRaised = userCampaigns.reduce((sum, c) => sum + c.raisedAmount, 0);
 
@@ -83,7 +83,7 @@ export default function Dashboard() {
     },
     {
       title: 'Active Campaigns',
-      value: userCampaigns.filter(c => c.isActive).length.toString(),
+      value: userCampaigns.filter(c => c.status === 'active').length.toString(),
       icon: <Users className="w-5 h-5" />,
       color: 'text-purple-600 bg-purple-100'
     }
@@ -185,7 +185,7 @@ export default function Dashboard() {
                         </div>
                         <div className="text-right">
                           <p className="font-semibold text-gray-900">
-                            -{transaction.totalAmount.toLocaleString()} {transaction.currency}
+                            -{(transaction.totalAmount || 0).toLocaleString()} {transaction.currency}
                           </p>
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             transaction.status === 'completed' 
@@ -274,20 +274,22 @@ export default function Dashboard() {
                       </h4>
                       <div className="flex items-center justify-between text-xs text-gray-600">
                         <span>
-                          {campaign.raisedAmount.toLocaleString()} / {campaign.goalAmount.toLocaleString()} {campaign.currency}
+                          {campaign.raisedAmount.toLocaleString()} / {campaign.targetAmount.toLocaleString()} {campaign.currency}
                         </span>
                         <span className={`px-2 py-1 rounded-full ${
-                          campaign.isActive 
+                          campaign.status === 'active'
                             ? 'bg-green-100 text-green-700'
+                            : campaign.status === 'completed'
+                            ? 'bg-blue-100 text-blue-700'
                             : 'bg-gray-100 text-gray-700'
                         }`}>
-                          {campaign.isActive ? 'Active' : 'Inactive'}
+                          {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                         </span>
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-1.5 mt-2">
                         <div 
                           className="bg-blue-600 h-1.5 rounded-full progress-bar" 
-                          style={{ width: `${Math.min((campaign.raisedAmount / campaign.goalAmount) * 100, 100)}%` }}
+                          style={{ width: `${Math.min((campaign.raisedAmount / campaign.targetAmount) * 100, 100)}%` }}
                         ></div>
                       </div>
                     </div>

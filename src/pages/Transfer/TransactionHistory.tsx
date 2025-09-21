@@ -10,7 +10,7 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
-import { useTransactions } from '../../contexts/TransactionContext';
+import { useTransactions } from '../../hooks/useTransactions';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function TransactionHistory() {

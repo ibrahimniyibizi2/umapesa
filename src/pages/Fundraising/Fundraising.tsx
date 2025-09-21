@@ -8,7 +8,7 @@ import {
   Calendar,
   TrendingUp
 } from 'lucide-react';
-import { useTransactions } from '../../contexts/TransactionContext';
+import { useTransactions } from '../../hooks/useTransactions';
 import { useAuth } from '../../hooks/useAuth';
 
 export default function Fundraising() {
@@ -19,7 +19,7 @@ export default function Fundraising() {
 
   const filteredCampaigns = campaigns
     .filter(campaign => 
-      campaign.isActive && 
+      campaign.status === 'active' && 
       (campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
        campaign.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
        campaign.creatorName.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -31,9 +31,9 @@ export default function Fundraising() {
         case 'popular':
           return b.contributions.length - a.contributions.length;
         case 'goal':
-          return b.goalAmount - a.goalAmount;
+          return b.targetAmount - a.targetAmount;
         case 'progress':
-          return (b.raisedAmount / b.goalAmount) - (a.raisedAmount / a.goalAmount);
+          return (b.raisedAmount / b.targetAmount) - (a.raisedAmount / a.targetAmount);
         default:
           return 0;
       }
@@ -84,7 +84,7 @@ export default function Fundraising() {
               <div>
                 <p className="text-sm font-medium text-gray-600 mb-1">Active Campaigns</p>
                 <p className="text-2xl font-bold text-gray-900">
-                  {campaigns.filter(c => c.isActive).length}
+                  {campaigns.filter(c => c.status === 'active').length}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
@@ -166,7 +166,7 @@ export default function Fundraising() {
         {filteredCampaigns.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredCampaigns.map((campaign) => {
-              const progressPercentage = getProgressPercentage(campaign.raisedAmount, campaign.goalAmount);
+              const progressPercentage = getProgressPercentage(campaign.raisedAmount, campaign.targetAmount);
               const daysLeft = getDaysLeft(campaign.endDate);
               
               return (
@@ -209,7 +209,7 @@ export default function Fundraising() {
                           {campaign.raisedAmount.toLocaleString()} {campaign.currency}
                         </span>
                         <span className="text-gray-600">
-                          of {campaign.goalAmount.toLocaleString()} {campaign.currency}
+                          of {campaign.targetAmount.toLocaleString()} {campaign.currency}
                         </span>
                       </div>
                       

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { CheckCircle, Download, Share2, ArrowLeft } from 'lucide-react';
 import { PaymentService } from '../../lib/nhonga';
-import { useTransactions } from '../../contexts/TransactionContext';
+import { useTransactions } from '../../hooks/useTransactions';
 import { PaymentMessageService } from '../../lib/paymentMessages';
 
 export default function PaymentSuccess() {

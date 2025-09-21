@@ -1,11 +1,30 @@
 // Demo API Service - No real backend calls
 const API_BASE_URL = '/api';
 
-// Import the Transaction type from the shared types file
-import { Transaction, Campaign, Contribution } from '../types/transaction';
-
-// Re-export the types for backward compatibility
-export type { Transaction, Campaign, Contribution };
+// Define Transaction interface
+export interface Transaction {
+  id: string;
+  senderId: string;
+  recipientEmail: string;
+  recipientName: string;
+  recipientPhone: string;
+  recipientCountry: 'mozambique' | 'rwanda';
+  amount: number;
+  currency: 'MZN' | 'RWF';
+  convertedAmount: number;
+  convertedCurrency: 'MZN' | 'RWF';
+  exchangeRate: number;
+  fee: number;
+  totalAmount: number;
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'cancelled';
+  type: 'send' | 'receive';
+  createdAt: string;
+  completedAt?: string;
+  reference: string;
+  description?: string;
+  paymentId?: string;
+  paymentMethod?: string;
+}
 
 class ApiService {
   private static getAuthHeaders(): HeadersInit {
@@ -66,7 +85,7 @@ class ApiService {
     };
   }
 
-  static async login(email: string, _password: string) {
+  static async login(email: string, password: string) {
     // Demo login - any email + any password works
     const isAdmin = email === 'admin@umapesa.com';
     
@@ -97,13 +116,7 @@ class ApiService {
     return await this.handleResponse(response);
   }
 
-  static async updateProfile(userData: {
-    firstName?: string;
-    lastName?: string;
-    phone?: string;
-    country?: 'mozambique' | 'rwanda';
-    email?: string;
-  }) {
+  static async updateProfile(userData: any) {
     const response = await fetch(`${API_BASE_URL}/auth/profile`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
@@ -142,46 +155,24 @@ class ApiService {
     }
   }
 
-  static async getUserTransactions(): Promise<{
-    success: boolean;
-    transactions: Transaction[];
-    isMock?: boolean;
-    isFallback?: boolean;
-    error?: string;
-  }> {
+  static async getUserTransactions() {
     try {
       const response = await fetch(`${API_BASE_URL}/transactions`, {
         method: 'GET',
-        headers: this.getAuthHeaders(),
-        credentials: 'include' // Include cookies for authentication
+        headers: this.getAuthHeaders()
       });
       
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.error || 
-          errorData.message || 
-          `Failed to fetch transactions: ${response.statusText}`
-        );
+        throw new Error(`Failed to fetch transactions: ${response.statusText}`);
       }
       
-      const data = await this.handleResponse(response);
-      
-      // Ensure the response has the expected format
-      if (!data.transactions) {
-        console.warn('Unexpected transactions response format:', data);
-        data.transactions = [];
-      }
-      
-      return data;
-    } catch (error: unknown) {
-      console.error('Error in getUserTransactions:', error);
-      
-      // Return empty array with error in all environments
+      return await this.handleResponse(response);
+    } catch (error) {
+      console.error('Failed to fetch transactions, returning empty array:', error);
+      // Return empty array if API call fails
       return {
-        success: false,
+        success: true,
         transactions: [],
-        error: error instanceof Error ? error.message : 'An unknown error occurred',
         isFallback: true
       };
     }
@@ -267,17 +258,7 @@ class ApiService {
     }
   }
 
-  static async createCampaign(campaignData: {
-    title: string;
-    description: string;
-    targetAmount: number;
-    currency: 'MZN' | 'RWF';
-    endDate: string;
-    imageUrl?: string;
-  }) {
-    // Use the campaignData to demonstrate it's being used
-    console.log('Creating campaign with data:', campaignData);
-    
+  static async createCampaign(campaignData: any) {
     // Demo campaign creation - always succeeds
     await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
     
@@ -286,31 +267,11 @@ class ApiService {
     return {
       success: true,
       campaignId: newCampaignId,
-      message: 'Campaign created successfully',
-      campaign: {
-        id: newCampaignId,
-        ...campaignData,
-        currentAmount: 0,
-        status: 'active',
-        creatorId: 'demo-user-id',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      }
+      message: 'Campaign created successfully'
     };
   }
 
-  static async contributeToCampaign(
-    campaignId: string, 
-    contributionData: {
-      amount: number;
-      currency: 'MZN' | 'RWF';
-      message?: string;
-      anonymous?: boolean;
-    }
-  ) {
-    // Use the parameters to demonstrate they're being used
-    console.log(`Contributing to campaign ${campaignId} with:`, contributionData);
-    
+  static async contributeToCampaign(campaignId: string, contributionData: any) {
     // Demo contribution - always succeeds
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
     
@@ -319,19 +280,7 @@ class ApiService {
     return {
       success: true,
       contributionId: contributionId,
-      campaignId: campaignId,
-      amount: contributionData.amount,
-      currency: contributionData.currency,
-      message: 'Contribution successful',
-      transaction: {
-        id: 'tx-' + Date.now(),
-        amount: contributionData.amount,
-        currency: contributionData.currency,
-        status: 'completed',
-        type: 'contribution',
-        reference: 'CONTRIB-' + Math.floor(100000 + Math.random() * 900000),
-        createdAt: new Date().toISOString()
-      }
+      message: 'Contribution successful'
     };
   }
 

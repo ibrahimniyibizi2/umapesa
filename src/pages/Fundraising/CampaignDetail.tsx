@@ -3,15 +3,14 @@ import { useParams, Link } from 'react-router-dom';
 import { 
   Heart, 
   Share2, 
+  ArrowLeft, 
   Calendar, 
   Users, 
-  ArrowLeft,
   AlertCircle,
-  CheckCircle,
   Wallet,
   Phone
 } from 'lucide-react';
-import { useTransactions } from '../../contexts/TransactionContext';
+import { useTransactions } from '../../hooks/useTransactions';
 import { PaymentService } from '../../lib/nhonga';
 import { useAuth } from '../../hooks/useAuth';
 
@@ -64,7 +63,7 @@ export default function CampaignDetail() {
     );
   }
 
-  const progressPercentage = Math.min((campaign.raisedAmount / campaign.goalAmount) * 100, 100);
+  const progressPercentage = Math.min((campaign.raisedAmount / campaign.targetAmount) * 100, 100);
   const daysLeft = campaign.endDate ? 
     Math.max(0, Math.ceil((new Date(campaign.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 
     null;
@@ -90,18 +89,16 @@ export default function CampaignDetail() {
         return;
       }
 
-      const fullPhoneNumber = contributionData.contributorCountryCode + contributionData.contributorPhone.replace(/^0+/, '');
-
       await contributeToCampaign(campaign.id, {
-        contributorName: contributionData.isAnonymous ? 'Anonymous' : contributionData.contributorName,
-        contributorEmail: contributionData.contributorEmail,
-        contributorPhone: fullPhoneNumber,
         amount,
         currency: campaign.currency,
-        isAnonymous: contributionData.isAnonymous,
-        message: contributionData.message
+        message: contributionData.message,
+        anonymous: contributionData.isAnonymous,
+        contributorId: 'current-user-id', // TODO: Replace with actual user ID
+        contributorName: contributionData.isAnonymous ? 'Anonymous' : contributionData.contributorName,
+        paymentMethod: 'mobile_money' // Default payment method
       });
-    } catch (error) {
+    } catch {
       setError('An error occurred. Please try again.');
     }
   };
@@ -112,17 +109,15 @@ export default function CampaignDetail() {
 
     try {
       const amount = parseFloat(contributionData.amount);
-      const fullPhoneNumber = contributionData.contributorCountryCode + contributionData.contributorPhone.replace(/^0+/, '');
 
       // Save contribution to database first with pending status
       const contributionId = await contributeToCampaign(campaign.id, {
-        contributorName: contributionData.isAnonymous ? 'Anonymous' : contributionData.contributorName,
-        contributorEmail: contributionData.contributorEmail,
-        contributorPhone: fullPhoneNumber,
         amount,
         currency: campaign.currency,
-        isAnonymous: contributionData.isAnonymous,
         message: contributionData.message,
+        anonymous: contributionData.isAnonymous,
+        contributorId: 'current-user-id', // TODO: Replace with actual user ID
+        contributorName: contributionData.isAnonymous ? 'Anonymous' : contributionData.contributorName,
         paymentMethod: methodId
       });
 
@@ -146,7 +141,7 @@ export default function CampaignDetail() {
       } else {
         setError('Failed to create contribution');
       }
-    } catch (error) {
+    } catch {
       setError('An error occurred during payment processing');
     } finally {
       setLoading(false);
@@ -193,7 +188,7 @@ export default function CampaignDetail() {
       // Implement withdrawal logic here
       setError('Withdrawal functionality not yet implemented');
       
-    } catch (error) {
+    } catch {
       setError('An error occurred during withdrawal');
     }
   };
@@ -213,15 +208,6 @@ export default function CampaignDetail() {
             Back to Campaigns
           </Link>
         </div>
-
-        {false && (
-          <div className="mb-6 bg-green-50 border border-green-200 rounded-lg p-4 flex items-center space-x-3">
-            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-            <p className="text-sm text-green-700">
-              Thank you for your contribution! Your support makes a difference.
-            </p>
-          </div>
-        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Campaign Content */}
@@ -286,13 +272,13 @@ export default function CampaignDetail() {
                       <div className="flex-1">
                         <div className="flex items-center justify-between mb-1">
                           <p className="font-medium text-gray-900">
-                            {contribution.isAnonymous ? 'Anonymous' : contribution.contributorName}
+                            {contribution.anonymous ? 'Anonymous' : contribution.contributorName}
                           </p>
                           <span className="font-semibold text-green-600">
-                            {contribution.amount.toLocaleString()} {contribution.currency}
+                            {contribution.amount.toLocaleString()} {contribution.currency || campaign.currency}
                           </span>
                         </div>
-                        {!contribution.isAnonymous && contribution.contributorName && (
+                        {!contribution.anonymous && contribution.contributorName && (
                           <p className="text-xs text-gray-500 mb-1">
                             +250788****84
                           </p>
@@ -331,7 +317,7 @@ export default function CampaignDetail() {
                     </span>
                   </div>
                   <p className="text-gray-600 mb-3">
-                    raised of {campaign.goalAmount.toLocaleString()} {campaign.currency} goal
+                    raised of {(campaign.goalAmount || campaign.targetAmount).toLocaleString()} {campaign.currency} goal
                   </p>
                   
                   <div className="w-full bg-gray-200 rounded-full h-3">
@@ -365,14 +351,14 @@ export default function CampaignDetail() {
             </div>
 
             {/* Contribute Button */}
-            {campaign.isActive && (
+            {campaign.status === 'active' && (
               <div className="space-y-3">
                 <button
                   onClick={() => setShowContributeForm(true)}
-                  className="w-full bg-blue-600 text-white py-4 px-6 rounded-lg font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center"
                 >
                   <Heart className="w-5 h-5 mr-2" />
-                  Contribute Now
+                  Contribute to this Cause
                 </button>
                 
                 {/* Withdrawal Button - Only for campaign owners */}
@@ -388,13 +374,13 @@ export default function CampaignDetail() {
               </div>
             )}
 
-            {!campaign.isActive && (
+            {campaign.status !== 'active' && (
               <button
                 disabled
                 className="w-full bg-gray-400 text-white py-4 px-6 rounded-lg font-semibold cursor-not-allowed flex items-center justify-center"
               >
-                <Heart className="w-5 h-5 mr-2" />
-                Campaign Ended
+                <AlertCircle className="w-5 h-5 mr-2" />
+                Campaign {campaign.status}
               </button>
             )}
 
@@ -679,8 +665,11 @@ export default function CampaignDetail() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
-                  <span className={`font-medium ${campaign.isActive ? 'text-green-600' : 'text-gray-600'}`}>
-                    {campaign.isActive ? 'Active' : 'Inactive'}
+                  <span className={`font-medium ${
+                    campaign.status === 'active' ? 'text-green-600' : 
+                    campaign.status === 'completed' ? 'text-blue-600' : 'text-gray-600'
+                  }`}>
+                    {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
                   </span>
                 </div>
                 <div className="flex justify-between">

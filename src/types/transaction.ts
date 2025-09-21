@@ -31,11 +31,13 @@ export interface Transaction {
     title: string;
     description: string;
     targetAmount: number;
+    goalAmount?: number; // For backward compatibility
     raisedAmount: number;
     currency: 'MZN' | 'RWF';
     startDate: string;
     endDate: string;
     status: 'active' | 'completed' | 'cancelled';
+    isActive?: boolean; // For backward compatibility
     imageUrl?: string;
     contributions: Contribution[];
     createdAt: string;
@@ -52,13 +54,18 @@ export interface Transaction {
     paymentId?: string;
     paymentMethod?: string;
     createdAt: string;
+    anonymous?: boolean;
+    currency?: 'MZN' | 'RWF';
   }
 
-  interface ContributionInput {
+  export interface ContributionInput {
     amount: number;
     currency: 'MZN' | 'RWF';
     message?: string;
     anonymous?: boolean;
+    contributorId: string;
+    contributorName: string;
+    paymentMethod: string;
   }
 
   export interface TransactionContextType {
