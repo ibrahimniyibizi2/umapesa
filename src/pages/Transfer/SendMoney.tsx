@@ -3,7 +3,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useTransactions } from '../../contexts/TransactionContext';
 import { generateReceiptPDF, ReceiptData } from '../../utils/pdfReceipt';
 import SuccessModal from './SuccessModal';
-import { AlertCircle } from 'lucide-react';
+import { AlertCircle, CheckCircle, Download, Share2, X, CreditCard, Smartphone } from 'lucide-react';
 
 type CountryType = 'mozambique' | 'rwanda';
 type CurrencyType = 'MZN' | 'RWF';
@@ -15,6 +15,8 @@ export default function SendMoney() {
   const [error, setError] = useState('');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showMobileForm, setShowMobileForm] = useState(false);
+  const [showCardForm, setShowCardForm] = useState(false);
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'card' | 'mobile' | null>(null);
   const [mobileNumber, setMobileNumber] = useState('');
   const [showSuccessMessage, setShowSuccessMessage] = useState(false);
   const [pdfUrl, setPdfUrl] = useState<string | undefined>(undefined);
@@ -32,13 +34,21 @@ export default function SendMoney() {
   };
 
   const handlePaymentTypeSelect = (type: 'card' | 'mobile') => {
+    setSelectedPaymentMethod(type);
     setShowPaymentModal(false);
     if (type === 'mobile') {
       setShowMobileForm(true);
+      setShowCardForm(false);
     } else if (type === 'card') {
-      // Handle card payment
-      setShowPaymentModal(false);
+      setShowCardForm(true);
+      setShowMobileForm(false);
     }
+  };
+
+  const resetForms = () => {
+    setShowMobileForm(false);
+    setShowCardForm(false);
+    setSelectedPaymentMethod(null);
   };
 
   const handleMobileSubmit = async (e: React.FormEvent) => {
@@ -114,11 +124,114 @@ export default function SendMoney() {
     // TODO: Implement actual sharing functionality
   };
 
+  // Card payment form component
+  const CardPaymentForm = () => (
+    <div className="mt-6 space-y-4">
+      <h3 className="text-lg font-medium text-gray-900">Detalhes do Cartão</h3>
+      <div className="space-y-4">
+        <div>
+          <label htmlFor="cardNumber" className="block text-sm font-medium text-gray-700 mb-1">
+            Número do Cartão
+          </label>
+          <input
+            type="text"
+            id="cardNumber"
+            placeholder="1234 5678 9012 3456"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label htmlFor="expiry" className="block text-sm font-medium text-gray-700 mb-1">
+              Validade
+            </label>
+            <input
+              type="text"
+              id="expiry"
+              placeholder="MM/AA"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label htmlFor="cvv" className="block text-sm font-medium text-gray-700 mb-1">
+              CVV
+            </label>
+            <input
+              type="text"
+              id="cvv"
+              placeholder="123"
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+        </div>
+        <div>
+          <label htmlFor="cardName" className="block text-sm font-medium text-gray-700 mb-1">
+            Nome no Cartão
+          </label>
+          <input
+            type="text"
+            id="cardName"
+            placeholder="Nome como aparece no cartão"
+            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          />
+        </div>
+        <div className="pt-4">
+          <button
+            type="button"
+            className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Pagar Agora
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
+  // Mobile payment form component
+  const MobilePaymentForm = () => (
+    <form onSubmit={handleMobileSubmit} className="mt-6 space-y-4">
+      <h3 className="text-lg font-medium text-gray-900">Pagamento por Dinheiro Móvel</h3>
+      <div>
+        <label htmlFor="mobileNumber" className="block text-sm font-medium text-gray-700 mb-1">
+          Número de Telefone
+        </label>
+        <input
+          type="tel"
+          id="mobileNumber"
+          value={mobileNumber}
+          onChange={(e) => setMobileNumber(e.target.value)}
+          placeholder="8XX XXX XXX"
+          className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          required
+        />
+      </div>
+      <div className="pt-2">
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-medium hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {loading ? 'Processando...' : 'Pagar com M-Pesa'}
+        </button>
+      </div>
+    </form>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-2xl shadow-sm p-6 mb-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-6">Enviar Dinheiro</h2>
+          <div className="flex justify-between items-center mb-6">
+            <h2 className="text-2xl font-bold text-gray-900">Enviar Dinheiro</h2>
+            {selectedPaymentMethod && (
+              <button
+                onClick={resetForms}
+                className="text-sm text-blue-600 hover:text-blue-800"
+              >
+                ← Voltar
+              </button>
+            )}
+          </div>
           
           {error && (
             <div className="mb-6 p-4 bg-red-50 border-l-4 border-red-500 text-red-700">
@@ -134,39 +247,63 @@ export default function SendMoney() {
           )}
 
           <div className="space-y-6">
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-blue-700">
-                Selecione um método de pagamento para continuar.
-              </p>
-            </div>
+            {!selectedPaymentMethod ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => handlePaymentTypeSelect('card')}
+                  className={`p-6 border-2 rounded-lg transition-colors text-left ${
+                    selectedPaymentMethod === 'card'
+                      ? 'border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-400 hover:bg-blue-50'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className={`p-3 rounded-full ${selectedPaymentMethod === 'card' ? 'bg-blue-100' : 'bg-gray-100'} mr-4`}>
+                      <CreditCard className={`w-6 h-6 ${selectedPaymentMethod === 'card' ? 'text-blue-600' : 'text-gray-600'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Cartão de Crédito/Débito</p>
+                      <p className="text-sm text-gray-500">Pague com seu cartão</p>
+                    </div>
+                  </div>
+                </button>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button
-                onClick={() => setShowPaymentModal(true)}
-                className="p-6 border border-gray-200 rounded-lg hover:border-blue-400 hover:bg-blue-50 transition-colors text-left"
-              >
-                <div className="flex items-center">
-                  <span className="text-3xl mr-4">💳</span>
-                  <div>
-                    <p className="font-medium text-gray-900">Cartão de Crédito/Débito</p>
-                    <p className="text-sm text-gray-600">Visa, Mastercard, etc.</p>
+                <button
+                  onClick={() => handlePaymentTypeSelect('mobile')}
+                  className={`p-6 border-2 rounded-lg transition-colors text-left ${
+                    selectedPaymentMethod === 'mobile'
+                      ? 'border-green-500 bg-green-50'
+                      : 'border-gray-200 hover:border-green-400 hover:bg-green-50'
+                  }`}
+                >
+                  <div className="flex items-center">
+                    <div className={`p-3 rounded-full ${selectedPaymentMethod === 'mobile' ? 'bg-green-100' : 'bg-gray-100'} mr-4`}>
+                      <Smartphone className={`w-6 h-6 ${selectedPaymentMethod === 'mobile' ? 'text-green-600' : 'text-gray-600'}`} />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">Dinheiro Móvel</p>
+                      <p className="text-sm text-gray-500">Pague com M-Pesa</p>
+                    </div>
                   </div>
+                </button>
+              </div>
+            ) : (
+              <div className="bg-gray-50 p-4 rounded-lg">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-lg font-medium text-gray-900">
+                    {selectedPaymentMethod === 'card' ? 'Pagamento com Cartão' : 'Pagamento por Móvel'}
+                  </h3>
+                  <button
+                    onClick={resetForms}
+                    className="text-sm text-gray-500 hover:text-gray-700"
+                  >
+                    Alterar método
+                  </button>
                 </div>
-              </button>
-              
-              <button
-                onClick={() => handlePaymentTypeSelect('mobile')}
-                className="p-6 border border-gray-200 rounded-lg hover:border-green-400 hover:bg-green-50 transition-colors text-left"
-              >
-                <div className="flex items-center">
-                  <span className="text-3xl mr-4">📱</span>
-                  <div>
-                    <p className="font-medium text-gray-900">Dinheiro Móvel</p>
-                    <p className="text-sm text-gray-600">M-Pesa, eMola, etc.</p>
-                  </div>
-                </div>
-              </button>
-            </div>
+                {showCardForm && <CardPaymentForm />}
+                {showMobileForm && <MobilePaymentForm />}
+              </div>
+            )}
           </div>
         </div>
       </div>

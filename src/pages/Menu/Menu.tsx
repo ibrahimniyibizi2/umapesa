@@ -58,6 +58,7 @@ export default function Menu() {
     },
     {
       title: 'Services',
+      link: '/services',
       items: [
         {
           icon: <Send className="w-5 h-5" />,
@@ -202,6 +203,14 @@ export default function Menu() {
                   <ChevronRight className="w-5 h-5 text-gray-400" />
                 </Link>
               ))}
+              {section.link && (
+                <Link
+                  to={section.link}
+                  className="block p-4 text-center text-blue-600 hover:bg-gray-50 transition-colors font-medium"
+                >
+                  View All Services
+                </Link>
+              )}
             </div>
           </div>
         ))}

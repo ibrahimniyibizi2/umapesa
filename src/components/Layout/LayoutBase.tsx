@@ -1,5 +1,7 @@
+import React from 'react';
 import { Outlet } from 'react-router-dom';
 import BottomNav from './BottomNav';
+import ScrollPopup from '../ScrollPopup/ScrollPopup';
 
 interface LayoutBaseProps {
   withBottomNav?: boolean;
@@ -12,7 +14,11 @@ const LayoutBase = ({ withBottomNav = true, children }: LayoutBaseProps) => {
       <main className="pb-16">
         {children || <Outlet />}
       </main>
+      {/* Bottom Navigation */}
       {withBottomNav && <BottomNav />}
+      
+      {/* Scroll Popup */}
+      <ScrollPopup />
     </div>
   );
 };

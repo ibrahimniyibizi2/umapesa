@@ -17,6 +17,7 @@ import TransactionHistory from './pages/Transfer/TransactionHistory';
 import PaymentMethods from './pages/PaymentMethods/PaymentMethods';
 import Notifications from './pages/Notifications/Notifications';
 import Settings from './pages/Settings/Settings';
+import Services from './pages/Services/Services';
 import Help from './pages/Help/Help';
 import Support from './pages/Support/Support';
 import Security from './pages/Security/Security';
@@ -93,6 +94,8 @@ function AppContent() {
         <Route path="/terms" element={<TermsOfService />} />
         <Route path="/compliance" element={<Compliance />} />
         <Route path="/about" element={<About />} />
+        <Route path="/services" element={<Services />} />
+        <Route path="/settings" element={<Navigate to="/profile/settings" replace />} />
       </Route>
       
       {/* 404 - Not Found */}
