@@ -79,9 +79,13 @@ function AppContent() {
         <Route path="/fundraise" element={<Navigate to="/fundraising" replace />} />
         <Route path="/create-campaign" element={<CreateCampaign />} />
         <Route path="/profile" element={<ProfilePage />}>
+          <Route index element={<Navigate to="edit" replace />} />
+          <Route path="edit" element={<ProfilePage />} />
           <Route path="payment-methods" element={<PaymentMethods />} />
           <Route path="notifications" element={<Notifications />} />
           <Route path="settings" element={<Settings />} />
+          {/* Redirect any unknown profile/* routes to the edit page */}
+          <Route path="*" element={<Navigate to="edit" replace />} />
         </Route>
         <Route path="/menu" element={<Menu />} />
         

@@ -4,9 +4,13 @@ import { Link, Outlet, useLocation } from 'react-router-dom';
 const ProfilePage = () => {
   const location = useLocation();
   
-  // If we're on a nested route, only render the Outlet
-  if (location.pathname !== '/profile') {
-    return <Outlet />;
+  // If we're on a nested route, render the Outlet with the nested route
+  if (location.pathname !== '/profile' && location.pathname !== '/profile/') {
+    return (
+      <div className="p-4">
+        <Outlet />
+      </div>
+    );
   }
   return (
     <div className="p-4">
