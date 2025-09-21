@@ -1,0 +1,31 @@
+{
+  "name": "nhonga-flutterwave-automation",
+  "version": "1.0.0",
+  "description": "Automation system for Nhonga SMS confirmations to Flutterwave transfers",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "bullmq": "^4.15.0",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "ioredis": "^5.3.2",
+    "multer": "^2.0.2",
+    "nhonga-api": "^1.0.0",
+    "node-fetch": "^3.3.2",
+    "uuid": "^13.0.0"
+  },
+  "keywords": [
+    "nhonga",
+    "flutterwave",
+    "automation",
+    "sms",
+    "money-transfer"
+  ],
+  "author": "UmaPesa Team",
+  "license": "MIT"
+}

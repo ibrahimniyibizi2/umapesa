@@ -1,0 +1,39 @@
+{
+  "name": "nhonga-flutterwave-automation",
+  "version": "1.0.0",
+  "description": "Automated SMS-triggered money transfer system integrating Nhonga and Flutterwave APIs",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node src/test.js",
+    "setup": "node src/setup.js"
+  },
+  "dependencies": {
+    "axios": "^1.6.0",
+    "bullmq": "^5.58.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "ioredis": "^5.7.0",
+    "joi": "^17.11.0",
+    "nhonga-api": "^1.0.0",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  },
+  "keywords": [
+    "nhonga",
+    "flutterwave",
+    "automation",
+    "sms",
+    "money-transfer",
+    "api-integration"
+  ],
+  "author": "UmaPesa Development Team",
+  "license": "MIT"
+}
