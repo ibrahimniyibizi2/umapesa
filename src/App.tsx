@@ -14,6 +14,7 @@ import Fundraising from './pages/Fundraising/Fundraising';
 import CreateCampaign from './pages/Fundraising/CreateCampaign';
 import Menu from './pages/Menu/Menu';
 import TransactionHistory from './pages/Transfer/TransactionHistory';
+import TransactionStatus from './pages/TransactionStatus/TransactionStatus';
 import PaymentMethods from './pages/PaymentMethods/PaymentMethods';
 import Notifications from './pages/Notifications/Notifications';
 import Settings from './pages/Settings/Settings';
@@ -86,6 +87,8 @@ function AppContent() {
         
         {/* Menu Item Routes */}
         <Route path="/transaction-history" element={<TransactionHistory />} />
+        <Route path="/transactions" element={<TransactionHistory />} />
+        <Route path="/transaction/status" element={<TransactionStatus />} />
         <Route path="/exchange-rates" element={<ExchangeRates />} />
         <Route path="/help" element={<Help />} />
         <Route path="/support" element={<Support />} />

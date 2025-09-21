@@ -3,20 +3,146 @@ import dotenv from 'dotenv';
 import multer from 'multer';
 import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import fs from 'fs';
 import { processNhongaWebhook, createNhongaPayment, extractPhoneFromSMS, validateRwandanPhone, maskPhoneNumber } from './services/nhongaService.js';
-import { payoutQueue, payoutWorker } from './jobs/payoutJob.js';
 import { getFlutterwaveBalance } from './services/flutterwaveService.js';
 import { convertCurrency } from './services/currencyService.js';
+import { testConnection } from './config/database.js';
+import { User, Transaction } from './models/index.js';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 dotenv.config();
+
+// Test database connection on startup
+testConnection();
 
 const app = express();
 
 // Middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Transactions endpoints
+app.get('/api/transactions', async (req, res) => {
+  try {
+    // In a real app, you would verify the JWT token here
+    // and fetch transactions for the authenticated user
+    
+    // For now, we'll fetch all transactions
+    const transactions = await Transaction.findAll({
+      order: [['created_at', 'DESC']],
+      include: [
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'firstName', 'lastName', 'email']
+        }
+      ]
+    });
+
+    res.json({
+      success: true,
+      transactions: transactions.map(tx => ({
+        id: tx.id,
+        senderId: tx.userId,
+        recipientName: tx.recipientName,
+        recipientEmail: tx.recipientEmail,
+        recipientPhone: tx.recipientPhone,
+        recipientCountry: tx.recipientCountry,
+        amount: parseFloat(tx.amount),
+        currency: tx.currency,
+        convertedAmount: tx.convertedAmount ? parseFloat(tx.convertedAmount) : null,
+        convertedCurrency: tx.convertedCurrency,
+        exchangeRate: tx.exchangeRate ? parseFloat(tx.exchangeRate) : null,
+        fee: tx.fee ? parseFloat(tx.fee) : 0,
+        totalAmount: tx.totalAmount ? parseFloat(tx.totalAmount) : null,
+        status: tx.status,
+        type: tx.type,
+        paymentMethod: tx.paymentMethod,
+        paymentId: tx.paymentId,
+        reference: tx.reference,
+        description: tx.description,
+        createdAt: tx.createdAt,
+        completedAt: tx.completedAt
+      }))
+    });
+  } catch (error) {
+    console.error('Error fetching transactions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch transactions',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+// Create a new transaction
+app.post('/api/transactions', async (req, res) => {
+  try {
+    const {
+      recipientName,
+      recipientEmail,
+      recipientPhone,
+      recipientCountry,
+      amount,
+      currency,
+      type = 'send',
+      description
+    } = req.body;
+
+    // Basic validation
+    if (!recipientName || !recipientPhone || !recipientCountry || !amount || !currency) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields'
+      });
+    }
+
+    // In a real app, you would verify the JWT token and get the user ID
+    const userId = 'test-user-id'; // Replace with actual user ID from auth
+
+    // Create transaction
+    const transaction = await Transaction.create({
+      user_id: userId,
+      recipient_name: recipientName,
+      recipient_email: recipientEmail,
+      recipient_phone: recipientPhone,
+      recipient_country: recipientCountry,
+      amount,
+      currency,
+      type,
+      status: 'pending',
+      reference: `TXN${Date.now()}`,
+      description,
+      fee: 0, // Calculate fee based on your business logic
+      total_amount: amount // Calculate total amount including fee
+    });
+
+    res.status(201).json({
+      success: true,
+      transaction: {
+        id: transaction.id,
+        reference: transaction.reference,
+        status: transaction.status,
+        amount: parseFloat(transaction.amount),
+        currency: transaction.currency,
+        recipientName: transaction.recipient_name,
+        recipientPhone: transaction.recipient_phone,
+        createdAt: transaction.created_at
+      }
+    });
+  } catch (error) {
+    console.error('Error creating transaction:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create transaction',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
 
 // CORS middleware
 app.use((req, res, next) => {
@@ -452,14 +578,14 @@ app.listen(PORT, () => {
 // Graceful shutdown
 process.on('SIGTERM', async () => {
   console.log('Shutting down gracefully...');
-  await payoutWorker.close();
+  console.log('Payout worker disabled - Redis not available');
   await payoutQueue.close();
   process.exit(0);
 });
 
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
-  await payoutWorker.close();
+  console.log('Payout worker disabled - Redis not available');
   await payoutQueue.close();
   process.exit(0);
 });

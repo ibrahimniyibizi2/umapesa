@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test.js"
+    "test": "node test.js",
+    "db:init": "node scripts/init-db.js",
+    "db:reset": "rm -f data/database.sqlite && node scripts/init-db.js"
   },
   "dependencies": {
     "bullmq": "^4.15.0",
@@ -17,6 +19,8 @@
     "multer": "^2.0.2",
     "nhonga-api": "^1.0.0",
     "node-fetch": "^3.3.2",
+    "sequelize": "^6.37.7",
+    "sqlite3": "^5.1.7",
     "uuid": "^13.0.0"
   },
   "keywords": [
