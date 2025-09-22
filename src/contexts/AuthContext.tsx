@@ -101,7 +101,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const register = async (userData: RegisterData): Promise<boolean> => {
     try {
-      // Demo registration - any data works
+      // Validate required fields
+      if (!userData.email || !userData.password || !userData.firstName || !userData.lastName || !userData.phone || !userData.country) {
+        throw new Error('All fields are required');
+      }
+
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(userData.email)) {
+        throw new Error('Please enter a valid email address');
+      }
+
+      // Validate password strength
+      if (userData.password.length < 8) {
+        throw new Error('Password must be at least 8 characters long');
+      }
+
+      // Check if user already exists (in a real app, this would be an API call)
+      const existingUser = localStorage.getItem('umapesa_user');
+      if (existingUser) {
+        const parsedUser = JSON.parse(existingUser);
+        if (parsedUser.email === userData.email) {
+          throw new Error('An account with this email already exists');
+        }
+      }
+
+      // Create new user
       const demoUser = {
         id: 'demo-user-' + Date.now(),
         email: userData.email,
@@ -124,7 +149,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     } catch (error) {
       console.error('Registration error:', error);
-      return false;
+      // Re-throw the error to be handled by the component
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new Error('Registration failed. Please try again.');
     }
   };
 

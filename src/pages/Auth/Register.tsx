@@ -58,8 +58,16 @@ export default function Register() {
       } else {
         setError('Registration failed. Please try again.');
       }
-    } catch (error) {
-      setError('An error occurred. Please try again.');
+    } catch (error: unknown) {
+      // Handle different types of errors and provide more specific error messages
+      if (error instanceof Error) {
+        setError(error.message || 'An error occurred. Please try again.');
+      } else if (typeof error === 'string') {
+        setError(error);
+      } else {
+        setError('An unexpected error occurred. Please try again.');
+      }
+      console.error('Registration error:', error);
     } finally {
       setLoading(false);
     }
@@ -73,19 +81,102 @@ export default function Register() {
     }));
   };
 
-  const passwordStrength = (password: string) => {
-    let strength = 0;
-    if (password.length >= 8) strength++;
-    if (/[A-Z]/.test(password)) strength++;
-    if (/[a-z]/.test(password)) strength++;
-    if (/[0-9]/.test(password)) strength++;
-    if (/[^A-Za-z0-9]/.test(password)) strength++;
-    return strength;
-  };
+  const [passwordStrength, setPasswordStrength] = useState({
+    score: 0,
+    label: 'Very Weak',
+    color: 'bg-red-500',
+    suggestions: [] as string[]
+  });
 
-  const strengthLevel = passwordStrength(formData.password);
-  const strengthColors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-blue-500', 'bg-green-500'];
-  const strengthLabels = ['Very Weak', 'Weak', 'Fair', 'Good', 'Strong'];
+  const updatePasswordStrength = (password: string) => {
+    const suggestions = [];
+    let score = 0;
+    
+    // Length check
+    if (password.length >= 8) {
+      score++;
+    } else {
+      suggestions.push('Use at least 8 characters');
+    }
+    
+    // Uppercase check
+    if (/[A-Z]/.test(password)) {
+      score++;
+    } else {
+      suggestions.push('Include at least one uppercase letter');
+    }
+    
+    // Lowercase check
+    if (/[a-z]/.test(password)) {
+      score++;
+    } else {
+      suggestions.push('Include at least one lowercase letter');
+    }
+    
+    // Number check
+    if (/[0-9]/.test(password)) {
+      score++;
+    } else {
+      suggestions.push('Include at least one number');
+    }
+    
+    // Special character check
+    if (/[^A-Za-z0-9]/.test(password)) {
+      score++;
+    } else {
+      suggestions.push('Include at least one special character');
+    }
+    
+    // Determine strength label and color
+    let label, color;
+    switch (score) {
+      case 0:
+      case 1:
+        label = 'Very Weak';
+        color = 'bg-red-500';
+        break;
+      case 2:
+        label = 'Weak';
+        color = 'bg-orange-500';
+        break;
+      case 3:
+        label = 'Fair';
+        color = 'bg-yellow-500';
+        break;
+      case 4:
+        label = 'Good';
+        color = 'bg-blue-500';
+        break;
+      case 5:
+        label = 'Strong';
+        color = 'bg-green-500';
+        break;
+      default:
+        label = 'Very Weak';
+        color = 'bg-red-500';
+    }
+    
+    setPasswordStrength({
+      score,
+      label,
+      color,
+      suggestions: score < 5 ? suggestions : []
+    });
+  };
+  
+  // Update password strength when password changes
+  React.useEffect(() => {
+    if (formData.password) {
+      updatePasswordStrength(formData.password);
+    } else {
+      setPasswordStrength({
+        score: 0,
+        label: 'Very Weak',
+        color: 'bg-red-500',
+        suggestions: []
+      });
+    }
+  }, [formData.password]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">

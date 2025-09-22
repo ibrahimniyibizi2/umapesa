@@ -28,6 +28,7 @@ import TermsOfService from './pages/TermsOfService/TermsOfService';
 import Compliance from './pages/Compliance/Compliance';
 import About from './pages/About/About';
 import NotFound from './pages/NotFound';
+import Dashboard from './pages/Dashboard/Dashboard';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -73,6 +74,7 @@ function AppContent() {
         </ProtectedRoute>
       }>
         <Route path="/" element={<Homepage />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="/send-money" element={<SendMoney />} />
         <Route path="/send" element={<Navigate to="/send-money" replace />} />
         <Route path="/fundraising" element={<Fundraising />} />

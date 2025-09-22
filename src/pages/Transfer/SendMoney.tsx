@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useFlutterwave } from 'flutterwave-react-v3';
 import { 
   Send, 
-  User, 
+  User as UserIcon, 
   Phone, 
   MapPin, 
   DollarSign, 
@@ -355,7 +355,7 @@ const SendMoney: FC = () => {
                 {/* Recipient Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <User className="w-5 h-5 mr-2" />
+                    <UserIcon className="w-5 h-5 mr-2" />
                     Confirmar Pagamento com Cartão
                   </h3>
                   

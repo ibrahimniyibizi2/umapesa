@@ -1,6 +1,24 @@
 // Demo API Service - No real backend calls
 const API_BASE_URL = '/api';
 
+// Define interfaces
+interface UserProfile {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  country?: 'mozambique' | 'rwanda';
+  avatar?: string;
+}
+
+interface ContributionData {
+  amount: number;
+  currency: 'MZN' | 'RWF';
+  contributorName?: string;
+  message?: string;
+  isAnonymous?: boolean;
+  paymentMethod: string;
+}
+
 // Define Transaction interface
 export interface Transaction {
   id: string;
@@ -85,8 +103,11 @@ class ApiService {
     };
   }
 
-  static async login(email: string, password: string) {
-    // Demo login - any email + any password works
+  static async login(email: string, _password: string) {
+    // _password is intentionally unused in this demo implementation
+    // Using void to indicate this parameter is intentionally unused
+    void _password;
+    
     const isAdmin = email === 'admin@umapesa.com';
     
     return {
@@ -116,7 +137,7 @@ class ApiService {
     return await this.handleResponse(response);
   }
 
-  static async updateProfile(userData: any) {
+  static async updateProfile(userData: UserProfile) {
     const response = await fetch(`${API_BASE_URL}/auth/profile`, {
       method: 'PUT',
       headers: this.getAuthHeaders(),
@@ -258,29 +279,80 @@ class ApiService {
     }
   }
 
-  static async createCampaign(campaignData: any) {
-    // Demo campaign creation - always succeeds
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API delay
-    
-    const newCampaignId = 'campaign-' + Date.now();
-    
-    return {
-      success: true,
-      campaignId: newCampaignId,
-      message: 'Campaign created successfully'
-    };
+  static async createCampaign(campaignData: {
+    title: string;
+    description: string;
+    goalAmount: number;
+    currency: 'MZN' | 'RWF';
+    endDate?: string;
+    imageUrl?: string;
+    withdrawalNumber: string;
+    withdrawalMethod: string;
+  }) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/campaigns`, {
+        method: 'POST',
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({
+          title: campaignData.title,
+          description: campaignData.description,
+          goal_amount: Number(campaignData.goalAmount),
+          currency: campaignData.currency,
+          end_date: campaignData.endDate,
+          image_url: campaignData.imageUrl,
+          withdrawal_number: campaignData.withdrawalNumber,
+          withdrawal_method: campaignData.withdrawalMethod,
+          is_active: true
+        })
+      });
+      
+      const data = await this.handleResponse(response);
+      
+      return {
+        success: true,
+        campaignId: data.data.id,
+        message: 'Campaign created successfully',
+        data: data.data
+      };
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      throw new Error(error instanceof Error ? error.message : 'Failed to create campaign');
+    }
   }
 
-  static async contributeToCampaign(campaignId: string, contributionData: any) {
-    // Demo contribution - always succeeds
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API delay
+  static async contributeToCampaign(_campaignId: string, _contributionData: ContributionData) {
+    // Using void to indicate these parameters are intentionally unused in this demo
+    void _campaignId;
+    void _contributionData;
+    // _campaignId and _contributionData are intentionally unused in this demo implementation
+    // In a real implementation, these would be used to process the contribution
     
-    const contributionId = 'contrib-' + Date.now();
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
+    // In a real implementation, you would use the parameters like this:
+    // const { amount, currency } = _contributionData;
+    // const response = await fetch(`${API_BASE_URL}/campaigns/${_campaignId}/contribute`, {
+    //   method: 'POST',
+    //   headers: this.getAuthHeaders(),
+    //   body: JSON.stringify({
+    //     amount,
+    //     currency,
+    //     // ... other contribution data
+    //   })
+    // });
+    // return await this.handleResponse(response);
+    
+    // For demo purposes, return a success response
     return {
       success: true,
-      contributionId: contributionId,
-      message: 'Contribution successful'
+      contributionId: `contrib-${Date.now()}`,
+      message: 'Contribution successful',
+      // In a real implementation, you might want to include more data from the response
+      data: {
+        campaignId: _campaignId,
+        // ... other relevant data
+      }
     };
   }
 

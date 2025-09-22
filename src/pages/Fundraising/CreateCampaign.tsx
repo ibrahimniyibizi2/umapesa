@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { CheckCircle, Heart } from 'lucide-react';
+import ApiService from '../../lib/api';
 import { useAuth } from '../../hooks/useAuth';
 
 const CreateCampaign = () => {
@@ -91,12 +92,26 @@ const CreateCampaign = () => {
     setError('');
     
     try {
-      // TODO: Implement actual form submission
-      console.log('Form submitted:', formData);
+      // Validate required fields
+      if (!formData.title || !formData.description || !formData.goalAmount || !formData.withdrawalNumber || !formData.withdrawalMethod) {
+        throw new Error('Please fill in all required fields');
+      }
+
+      await ApiService.createCampaign({
+        title: formData.title,
+        description: formData.description,
+        goalAmount: Number(formData.goalAmount),
+        currency: formData.currency,
+        endDate: formData.endDate || undefined,
+        imageUrl: formData.imageUrl || undefined,
+        withdrawalNumber: formData.withdrawalNumber,
+        withdrawalMethod: formData.withdrawalMethod
+      });
+      
       setSuccess(true);
     } catch (err) {
       console.error('Error creating campaign:', err);
-      setError('Failed to create campaign. Please try again.');
+      setError(err instanceof Error ? err.message : 'Failed to create campaign. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -189,6 +204,40 @@ const CreateCampaign = () => {
                   >
                     <option value="MZN">MZN</option>
                     <option value="RWF">RWF</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Withdrawal Number *
+                  </label>
+                  <input
+                    type="text"
+                    name="withdrawalNumber"
+                    value={formData.withdrawalNumber}
+                    onChange={handleChange}
+                    placeholder="Your mobile money or bank account number"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Withdrawal Method *
+                  </label>
+                  <select
+                    name="withdrawalMethod"
+                    value={formData.withdrawalMethod}
+                    onChange={handleChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    required
+                  >
+                    <option value="">Select withdrawal method</option>
+                    <option value="mobile_money">Mobile Money</option>
+                    <option value="bank_transfer">Bank Transfer</option>
                   </select>
                 </div>
               </div>

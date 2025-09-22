@@ -52,6 +52,7 @@ interface TransactionProviderProps {
 
 export const TransactionProvider: React.FC<TransactionProviderProps> = ({ children }) => {
   const { user } = useAuth();
+  const typedUser = user as { id: string; email: string; firstName: string; lastName: string; country: 'mozambique' | 'rwanda' } | null;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [loading, setLoading] = useState(false);
@@ -188,21 +189,22 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     try {
       setLoading(true);
       const result = await ApiService.createCampaign({
-        ...data,
-        creatorId: user.id,
-        creatorName: user.firstName,
-        raisedAmount: 0,
-        startDate: new Date().toISOString(),
-        status: 'active',
-        contributions: []
+        title: data.title,
+        description: data.description,
+        goalAmount: data.targetAmount,
+        currency: data.currency,
+        endDate: data.endDate,
+        imageUrl: data.imageUrl,
+        withdrawalNumber: '', // These should be provided by the user
+        withdrawalMethod: 'bank_transfer' // Default value, should be configurable
       });
 
       if (result.success) {
         const newCampaign: Campaign = {
           ...data,
           id: result.campaignId,
-          creatorId: user.id.toString(),
-          creatorName: user.firstName,
+          creatorId: typedUser?.id || '',
+          creatorName: typedUser?.firstName || '',
           raisedAmount: 0,
           startDate: new Date().toISOString(),
           status: 'active',
@@ -222,7 +224,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, typedUser?.id, typedUser?.firstName]);
 
   const contributeToCampaign = useCallback(async (
     campaignId: string,
@@ -244,8 +246,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         currency: data.currency,
         message: data.message,
         anonymous: data.anonymous,
-        contributorId: user.id,
-        contributorName: user.firstName || 'Anonymous',
+        contributorId: typedUser?.id || '',
+        contributorName: typedUser?.firstName || 'Anonymous',
         paymentMethod: 'card' as const
       };
 
@@ -256,8 +258,8 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         const newContribution: Contribution = {
           id: result.contributionId,
           campaignId,
-          contributorId: user.id.toString(),
-          contributorName: data.anonymous ? 'Anonymous' : (user.firstName || 'Anonymous'),
+          contributorId: typedUser?.id || '',
+          contributorName: data.anonymous ? 'Anonymous' : (typedUser?.firstName || 'Anonymous'),
           amount: data.amount,
           message: data.message,
           paymentStatus: 'pending',
@@ -288,7 +290,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, typedUser?.id, typedUser?.firstName]);
 
   const updateCampaignContribution = useCallback(async (
     contributionId: string, 
@@ -350,7 +352,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         convertedAmount: amount,
         convertedCurrency: data.currency,
         exchangeRate: data.currency === 'MZN' ? exchangeRates.MZN_to_RWF : exchangeRates.RWF_to_MZN,
-        senderId: user.id.toString(),
+        senderId: typedUser?.id || '',
         reference,
         paymentId: '',
         paymentMethod: 'card',
@@ -402,7 +404,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     } finally {
       setLoading(false);
     }
-  }, [user, exchangeRates]);
+  }, [user, exchangeRates, typedUser?.id]);
 
   // Create context value with all the functions and state
   const contextValue: TransactionContextType = {
