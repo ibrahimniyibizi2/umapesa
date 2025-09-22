@@ -5,11 +5,11 @@ import { PaymentMessageService } from './paymentMessages';
 // Validate API configuration before making requests
 const validateApiConfig = (): boolean => {
   if (!config.nhonga.apiKey || config.nhonga.apiKey.length < 10) {
-    console.error('Invalid Nhonga API key configuration');
+    console.warn('Invalid Nhonga API key configuration - payment features will be disabled');
     return false;
   }
   if (!config.nhonga.secretKey || config.nhonga.secretKey.length < 10) {
-    console.error('Invalid Nhonga secret key configuration');
+    console.warn('Invalid Nhonga secret key configuration - payment features will be disabled');
     return false;
   }
   return true;

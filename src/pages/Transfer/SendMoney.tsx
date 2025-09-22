@@ -95,7 +95,7 @@ const SendMoney: FC = () => {
   
   // Get Flutterwave config
   const getFlutterwaveConfig = useCallback((): FlutterwaveConfig => ({
-    public_key: process.env.REACT_APP_FLUTTERWAVE_PUBLIC_KEY || '',
+    public_key: import.meta.env.VITE_FLUTTERWAVE_PUBLIC_KEY || 'FLWPUBK-TEST-SANDBOXDEMOKEY-X',
     tx_ref: `tx-${Date.now()}`,
     amount: Number(formData.amount) || 0,
     currency: formData.currency,
