@@ -1,4 +1,40 @@
 // src/types/transaction.ts
+
+// API Response Types
+export interface ApiContribution {
+  id?: string;
+  campaignId?: string;
+  contributorId?: string;
+  contributorName?: string;
+  amount?: number;
+  message?: string;
+  paymentStatus?: string;
+  paymentId?: string;
+  paymentMethod?: string;
+  createdAt?: string;
+}
+
+export interface ApiCampaign {
+  id?: string;
+  title?: string;
+  description?: string;
+  goalAmount?: number;
+  targetAmount?: number;
+  currency?: string;
+  creatorId?: string;
+  creatorName?: string;
+  raisedAmount?: number;
+  startDate?: string;
+  endDate?: string;
+  status?: string;
+  isActive?: boolean;
+  imageUrl?: string;
+  contributions?: ApiContribution[];
+  createdAt?: string;
+  withdrawalNumber?: string;
+  withdrawalMethod?: string;
+}
+
 export interface Transaction {
     id: string;
     senderId: string;
@@ -34,15 +70,16 @@ export interface Transaction {
     goalAmount?: number; // For backward compatibility
     raisedAmount: number;
     currency: 'MZN' | 'RWF';
-    startDate: string;
+    startDate?: string;
     endDate: string;
-    status: 'active' | 'completed' | 'cancelled';
+    status?: 'active' | 'completed' | 'cancelled';
     isActive?: boolean; // For backward compatibility
     imageUrl?: string;
     withdrawalNumber?: string;
     withdrawalMethod?: 'm-pesa' | 'airtel-money' | 'mpamba';
-    contributions: Contribution[];
-    createdAt: string;
+    contributions?: Contribution[];
+    createdAt?: string;
+    updatedAt?: string;
   }
   
   export interface Contribution {

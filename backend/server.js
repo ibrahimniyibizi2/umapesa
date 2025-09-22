@@ -5,7 +5,18 @@ import { v4 as uuidv4 } from 'uuid';
 import path from 'path';
 import fs from 'fs';
 import { processNhongaWebhook, createNhongaPayment, extractPhoneFromSMS, validateRwandanPhone, maskPhoneNumber } from './services/nhongaService.js';
-import { payoutQueue, payoutWorker } from './jobs/payoutJob.js';
+// Import job queue with error handling
+let payoutQueue = null;
+let payoutWorker = null;
+
+try {
+  const { payoutQueue: queue, payoutWorker: worker } = await import('./jobs/payoutJob.js');
+  payoutQueue = queue;
+  payoutWorker = worker;
+  console.log('Redis job queue initialized');
+} catch (error) {
+  console.warn('Failed to initialize Redis job queue. Some features may be limited. Error:', error.message);
+}
 import { getFlutterwaveBalance } from './services/flutterwaveService.js';
 import { convertCurrency } from './services/currencyService.js';
 import cors from 'cors';
@@ -37,20 +48,37 @@ app.use((req, res, next) => {
 // Configure multer for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    // Create uploads directory if it doesn't exist
-    const uploadDir = 'uploads/';
+    // Create images directory if it doesn't exist
+    const uploadDir = 'images/';
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
     cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
+    const ext = path.extname(file.originalname).toLowerCase();
     cb(null, `${uuidv4()}${ext}`);
   }
 });
 
-const upload = multer({ storage });
+// File filter to only allow images
+const fileFilter = (req, file, cb) => {
+  const allowedTypes = ['.jpg', '.jpeg', '.png', '.gif', '.webp'];
+  const ext = path.extname(file.originalname).toLowerCase();
+  if (allowedTypes.includes(ext)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Only image files are allowed!'), false);
+  }
+};
+
+const upload = multer({ 
+  storage, 
+  fileFilter,
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Initialize database
 const initDb = () => {
@@ -104,6 +132,11 @@ const initDb = () => {
 // Initialize database
 const db = initDb();
 
+// Serve static files from the images directory
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/images', express.static(path.join(__dirname, 'images')));
+
 // Import routes
 import campaignsRouter from './routes/campaigns.js';
 import transactionsRouter from './routes/transactions.js';
@@ -140,12 +173,25 @@ process.on('unhandledRejection', (err) => {
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
+  console.log('API Endpoints:');
+  console.log(`- POST   /api/campaigns/upload`);
+  console.log(`- GET    /api/campaigns`);
+  console.log(`- POST   /api/campaigns`);
+  console.log(`- GET    /api/campaigns/:id`);
+  console.log(`- PUT    /api/campaigns/:id`);
+  console.log(`- DELETE /api/campaigns/:id`);
+  console.log('\nMake sure the "images" directory exists and is writable');
 });
 
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('Shutting down gracefully...');
-  await payoutWorker.close();
+  if (payoutWorker) {
+    await payoutWorker.close();
+  }
+  if (payoutQueue) {
+    await payoutQueue.close();
+  }
   await payoutQueue.close();
   process.exit(0);
 });

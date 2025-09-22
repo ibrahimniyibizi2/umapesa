@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
   Heart, 
@@ -13,18 +13,80 @@ import {
 import { useTransactions } from '../../hooks/useTransactions';
 import { PaymentService } from '../../lib/nhonga';
 import { useAuth } from '../../hooks/useAuth';
+import ApiService from '../../lib/api';
+import { Campaign } from '../../types/transaction';
+
+// Define API response types locally since we're not importing them anymore
+interface ApiCampaign {
+  id: string;
+  title: string;
+  description: string;
+  goalAmount: number;
+  targetAmount?: number;
+  currency: string;
+  creatorId: string;
+  creatorName: string;
+  raisedAmount: number;
+  startDate?: string;
+  endDate?: string;
+  status?: 'active' | 'completed' | 'cancelled';
+  isActive?: boolean;
+  contributions?: ApiContribution[];
+  imageUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+interface ApiContribution {
+  id?: string;
+  campaignId?: string;
+  contributorId?: string;
+  contributorName?: string;
+  amount?: number;
+  message?: string;
+  paymentStatus?: string;
+  paymentId?: string;
+  paymentMethod?: string;
+  createdAt?: string;
+  anonymous?: boolean;
+}
+
+// Helper function to get a properly formatted image URL
+const getImageUrl = (url: string): string => {
+  if (!url) return '';
+  
+  // If it's already a full URL, data URL, or blob URL, return as is
+  if (url.startsWith('http') || url.startsWith('data:image') || url.startsWith('blob:')) {
+    return url;
+  }
+  
+  // If it's a local path starting with /images, assume it's from the backend
+  if (url.startsWith('/images/')) {
+    return `http://localhost:3000${url}`;
+  }
+  
+  // For any other local path, ensure it has a leading slash
+  return `/${url.replace(/^[\\/]/, '')}`;
+};
+
+// Helper function to get a placeholder image URL with the campaign title
+const getPlaceholderImage = (title: string): string => {
+  const text = title ? encodeURIComponent(title.substring(0, 50)) : 'Campaign+Image';
+  return `https://via.placeholder.com/800x450?text=${text}`;
+};
 
 export default function CampaignDetail() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
-  const { getCampaignById, contributeToCampaign } = useTransactions();
-  const [loading, setLoading] = useState(false);
+  const { getCampaignById, contributeToCampaign, loading: isTransactionsLoading } = useTransactions();
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [showContributeForm, setShowContributeForm] = useState(false);
   const [showWithdrawForm, setShowWithdrawForm] = useState(false);
   const [contributionData, setContributionData] = useState({
-    contributorName: '',
-    contributorEmail: '',
+    contributorName: user ? `${user.firstName} ${user.lastName}` : '',
+    contributorEmail: user?.email || '',
     contributorPhone: '',
     contributorCountryCode: '+258',
     amount: '',
@@ -44,8 +106,72 @@ export default function CampaignDetail() {
     { id: 'emola', name: 'eMola', icon: '📱', description: 'mCel Mobile Money' }
   ];
 
-  const campaign = id ? getCampaignById(id) : null;
+  // Load campaign data
+  useEffect(() => {
+    const loadCampaign = async () => {
+      if (!id) return;
+      
+      try {
+        setLoading(true);
+        setError('');
+        
+        // Try to get the campaign from the context first
+        const campaignData = getCampaignById(id);
+        
+        if (campaignData) {
+          setCampaign(campaignData);
+        } else {
+          // If not found in context, fetch from API
+          const response = await ApiService.getCampaignById(id);
+          if (response && typeof response === 'object' && 'success' in response && response.success && response.campaign) {
+            setCampaign(mapApiCampaign(response.campaign));
+          } else {
+            throw new Error(response?.error || 'Failed to load campaign');
+          }
+        }
+      } catch (err) {
+        console.error('Error loading campaign:', err);
+        setError('Failed to load campaign. Please try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadCampaign();
+  }, [id, getCampaignById]);
 
+  // Show loading state
+  if (loading || isTransactionsLoading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading campaign details...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4">
+            <p>{error}</p>
+          </div>
+          <Link
+            to="/fundraising"
+            className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors inline-block"
+          >
+            Back to Campaigns
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // Show not found state
   if (!campaign) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -56,95 +182,160 @@ export default function CampaignDetail() {
             to="/fundraising"
             className="bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Browse Campaigns
+            Back to Campaigns
           </Link>
         </div>
       </div>
     );
   }
 
-  const progressPercentage = Math.min((campaign.raisedAmount / campaign.targetAmount) * 100, 100);
-  const daysLeft = campaign.endDate ? 
-    Math.max(0, Math.ceil((new Date(campaign.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))) : 
-    null;
+  // Calculate progress percentage and days left
+  const progressPercentage = campaign && campaign.targetAmount > 0 
+    ? Math.min(Math.round(((campaign.raisedAmount || 0) / campaign.targetAmount) * 100), 100)
+    : 0;
 
-  const handleContribute = async (e: React.FormEvent) => {
+  // Calculate days left
+  const daysLeft = campaign?.endDate 
+    ? Math.ceil((new Date(campaign.endDate).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    : 0;
+
+  // Format currency - used in the template
+  const formatCurrency = (amount: number, currency?: string) => {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: currency || campaign?.currency || 'MZN',
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    }).format(amount);
+  };
+  
+  // Handle contribution button click
+  const handleContributeClick = () => {
+    setShowContributeForm(true);
+  };
+
+  const handleContributionSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError('');
-
+    
+    if (!campaign || !id) return;
+    
     try {
-      const amount = parseFloat(contributionData.amount);
-      if (amount <= 0) {
-        setError('Contribution amount must be greater than 0');
-        return;
-      }
-
-      if (!contributionData.contributorName.trim()) {
-        setError('Please enter your name');
-        return;
-      }
-
-      if (!contributionData.contributorPhone.trim()) {
-        setError('Please enter your phone number');
-        return;
-      }
-
-      await contributeToCampaign(campaign.id, {
-        amount,
-        currency: campaign.currency,
-        message: contributionData.message,
-        anonymous: contributionData.isAnonymous,
-        contributorId: 'current-user-id', // TODO: Replace with actual user ID
+      setLoading(true);
+      setError('');
+      
+      // Define the contribution data with proper types
+      const contributionPayload = {
+        campaignId: id,
+        amount: Number(contributionData.amount),
         contributorName: contributionData.isAnonymous ? 'Anonymous' : contributionData.contributorName,
-        paymentMethod: 'mobile_money' // Default payment method
-      });
-    } catch {
-      setError('An error occurred. Please try again.');
+        message: contributionData.message || '',
+        paymentMethod: 'card' as const,
+        phoneNumber: contributionData.contributorPhone ? 
+          `${contributionData.contributorCountryCode}${contributionData.contributorPhone}` : 
+          undefined,
+        email: contributionData.contributorEmail || undefined,
+      };
+      
+      // Make the contribution
+      const result = await contributeToCampaign(contributionPayload);
+      
+      if (result && typeof result === 'object' && 'success' in result && result.success === true) {
+        // Refresh campaign data
+        const response = await ApiService.getCampaignById(id);
+        if (response && typeof response === 'object' && 'success' in response && response.success && response.campaign) {
+          setCampaign(mapApiCampaign(response.campaign));
+        }
+        
+        // Reset form
+        setContributionData({
+          contributorName: user ? `${user.firstName} ${user.lastName}` : '',
+          contributorEmail: user?.email || '',
+          contributorPhone: '',
+          contributorCountryCode: '+258',
+          amount: '',
+          isAnonymous: false,
+          message: ''
+        });
+        
+        setShowContributeForm(false);
+      } else {
+        setError(result?.error || 'Failed to process contribution. Please try again.');
+      }
+    } catch (err) {
+      console.error('Error submitting contribution:', err);
+      setError('An unexpected error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const handlePaymentMethodSelect = async (methodId: string) => {
-    setShowPaymentMethodModal(false);
-    setLoading(true);
-
+  const handleWithdrawalSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!campaign || !id) return;
+    
     try {
-      const amount = parseFloat(contributionData.amount);
-
-      // Save contribution to database first with pending status
-      const contributionId = await contributeToCampaign(campaign.id, {
-        amount,
-        currency: campaign.currency,
-        message: contributionData.message,
-        anonymous: contributionData.isAnonymous,
-        contributorId: 'current-user-id', // TODO: Replace with actual user ID
-        contributorName: contributionData.isAnonymous ? 'Anonymous' : contributionData.contributorName,
-        paymentMethod: methodId
+      setLoading(true);
+      setError('');
+      
+      // Check if PaymentService has withdrawFunds method
+      if (!('withdrawFunds' in PaymentService) || typeof (PaymentService as { withdrawFunds?: unknown }).withdrawFunds !== 'function') {
+        throw new Error('Withdrawal functionality is not available');
+      }
+      
+      const paymentService = PaymentService as unknown as {
+        withdrawFunds: (data: {
+          campaignId: string;
+          amount: number;
+          phoneNumber: string;
+          method: string;
+        }) => Promise<{ success: boolean; error?: string }>;
+      };
+      
+      const result = await paymentService.withdrawFunds({
+        campaignId: id,
+        amount: Number(withdrawalData.amount),
+        phoneNumber: withdrawalData.phoneNumber,
+        method: withdrawalData.method,
       });
-
-      if (contributionId) {
-        // Create payment with Nhonga API based on selected method
-        const paymentResult = await PaymentService.createPayment({
-          amount: amount,
-          context: `Contribution to ${campaign.title}`,
-          userEmail: contributionData.contributorEmail || 'anonymous@umapesa.com',
-          currency: campaign.currency === 'RWF' ? 'USD' : campaign.currency,
-          returnUrl: `${window.location.origin}/payment-success?contribution_id=${contributionId}&campaign_id=${campaign.id}`,
-          environment: 'prod'
-        });
-
-        if (paymentResult.success && paymentResult.redirectUrl) {
-          // Redirect to payment page
-          window.location.href = paymentResult.redirectUrl;
-        } else {
-          setError(paymentResult.error || 'Payment processing failed');
+      
+      if (result && result.success) {
+        // Refresh campaign data
+        const response = await ApiService.getCampaignById(id);
+        if (response && typeof response === 'object' && 'success' in response && response.success && response.campaign) {
+          setCampaign(mapApiCampaign(response.campaign));
         }
+        
+        // Reset form
+        setWithdrawalData({
+          phoneNumber: '',
+          amount: '',
+          method: 'mpesa'
+        });
+        
+        setShowWithdrawForm(false);
       } else {
-        setError('Failed to create contribution');
+        setError(result?.error || 'Failed to process withdrawal. Please try again.');
       }
     } catch {
-      setError('An error occurred during payment processing');
-    } finally {
-      setLoading(false);
+      setError('An error occurred during withdrawal');
+    }
+  };
+
+  const handlePaymentMethodSelect = (method: string) => {
+    // Update the payment method in the contribution data
+    setContributionData(prev => ({
+      ...prev,
+      paymentMethod: method
+    }));
+    
+    // Close the modal
+    setShowPaymentMethodModal(false);
+    
+    // Submit the form
+    const form = document.getElementById('contribution-form') as HTMLFormElement;
+    if (form) {
+      form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
     }
   };
 
@@ -164,7 +355,7 @@ export default function CampaignDetail() {
     }));
   };
 
-  const handleWithdraw = async (e: React.FormEvent) => {
+  const handleWithdrawClick = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -195,33 +386,107 @@ export default function CampaignDetail() {
 
   const shareUrl = window.location.href;
 
+  // Ensure contributions is always an array
+  const campaignContributions = campaign?.contributions || [];
+
+  // Format date safely
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'N/A';
+    try {
+      return new Date(dateString).toLocaleDateString();
+    } catch (error) {
+      console.error('Error formatting date:', error);
+      return 'Invalid date';
+    }
+  };
+
+  // Map API campaign to our Campaign type
+  const mapApiCampaign = (apiCampaign: ApiCampaign): Campaign => ({
+    id: apiCampaign.id || '',
+    title: apiCampaign.title || '',
+    description: apiCampaign.description || '',
+    goalAmount: apiCampaign.goalAmount || 0,
+    targetAmount: apiCampaign.targetAmount || apiCampaign.goalAmount || 0,
+    currency: (apiCampaign.currency === 'MZN' || apiCampaign.currency === 'RWF') 
+      ? apiCampaign.currency 
+      : 'MZN',
+    creatorId: apiCampaign.creatorId || '',
+    creatorName: apiCampaign.creatorName || '',
+    raisedAmount: apiCampaign.raisedAmount || 0,
+    startDate: apiCampaign.startDate || new Date().toISOString(),
+    endDate: apiCampaign.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+    status: (apiCampaign.status === 'active' || apiCampaign.status === 'completed' || apiCampaign.status === 'cancelled')
+      ? apiCampaign.status
+      : (apiCampaign.isActive ? 'active' : 'completed'),
+    contributions: Array.isArray(apiCampaign.contributions) 
+      ? (apiCampaign.contributions || []).map((c: ApiContribution) => ({
+          id: c.id || '',
+          campaignId: c.campaignId || '',
+          contributorId: c.contributorId || '',
+          contributorName: c.contributorName || 'Anonymous',
+          amount: c.amount || 0,
+          message: c.message,
+          paymentStatus: c.paymentStatus || 'pending',
+          paymentId: c.paymentId,
+          paymentMethod: c.paymentMethod,
+          createdAt: c.createdAt || new Date().toISOString(),
+          anonymous: c.anonymous || false
+        }))
+      : [],
+    imageUrl: apiCampaign.imageUrl,
+    createdAt: apiCampaign.createdAt || new Date().toISOString(),
+    updatedAt: apiCampaign.updatedAt || new Date().toISOString()
+  });
+
   return (
     <div className="min-h-screen bg-gray-50 py-8">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Back Button */}
-        <div className="mb-6">
-          <Link
-            to="/fundraising"
-            className="inline-flex items-center text-blue-600 hover:text-blue-700 transition-colors"
-          >
-            <ArrowLeft className="w-5 h-5 mr-2" />
-            Back to Campaigns
-          </Link>
-        </div>
+        {/* Header */}
+        <header className="bg-white shadow">
+          <div className="max-w-7xl mx-auto px-4 py-6 sm:px-6 lg:px-8 flex justify-between items-center">
+            <Link
+              to="/fundraising"
+              className="flex items-center text-gray-600 hover:text-gray-900"
+            >
+              <ArrowLeft className="h-5 w-5 mr-2" />
+              Back to Campaigns
+            </Link>
+            <h1 className="text-2xl font-bold text-gray-900">Campaign Details</h1>
+            <div className="w-8"></div> {/* For alignment */}
+          </div>
+        </header>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Campaign Content */}
           <div className="lg:col-span-2 space-y-6">
             {/* Campaign Image */}
-            {campaign.imageUrl && (
-              <div className="aspect-video bg-gray-200 rounded-xl overflow-hidden">
+            <div className="aspect-video bg-gray-200 rounded-xl overflow-hidden">
+              {campaign.imageUrl ? (
                 <img
-                  src={campaign.imageUrl}
+                  src={getImageUrl(campaign.imageUrl)}
                   alt={campaign.title}
                   className="w-full h-full object-cover"
+                  onError={(e) => {
+                    // If image fails to load, show a placeholder
+                    const target = e.target as HTMLImageElement;
+                    target.onerror = null;
+                    target.src = getPlaceholderImage(campaign.title);
+                  }}
                 />
-              </div>
-            )}
+              ) : (
+                <div className="w-full h-full flex items-center justify-center bg-gray-100">
+                  <div className="text-center p-4">
+                    <div className="mx-auto w-16 h-16 bg-gray-300 rounded-full flex items-center justify-center mb-2">
+                      <svg className="w-8 h-8 text-gray-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V5h14v14z"/>
+                        <path d="M12 12c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-2.8 0-5 2.2-5 5h2c0-1.7 1.3-3 3-3s3 1.3 3 3h2c0-2.8-2.2-5-5-5z"/>
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-500">No image available</p>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Campaign Info */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
@@ -259,12 +524,12 @@ export default function CampaignDetail() {
             {/* Recent Contributions */}
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
               <h3 className="text-xl font-semibold text-gray-900 mb-4">
-                Recent Contributions ({campaign.contributions.length})
+                Recent Contributions ({campaignContributions.length})
               </h3>
               
-              {campaign.contributions.length > 0 ? (
+              {campaignContributions.length > 0 ? (
                 <div className="space-y-4">
-                  {campaign.contributions.slice(0, 10).map((contribution) => (
+                  {campaignContributions.slice(0, 10).map((contribution) => (
                     <div key={contribution.id} className="flex items-start space-x-3 p-4 bg-gray-50 rounded-lg">
                       <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                         <Heart className="w-5 h-5 text-green-600" />
@@ -275,7 +540,7 @@ export default function CampaignDetail() {
                             {contribution.anonymous ? 'Anonymous' : contribution.contributorName}
                           </p>
                           <span className="font-semibold text-green-600">
-                            {contribution.amount.toLocaleString()} {contribution.currency || campaign.currency}
+                            {formatCurrency(contribution.amount, contribution.currency || campaign.currency)}
                           </span>
                         </div>
                         {!contribution.anonymous && contribution.contributorName && (
@@ -287,7 +552,7 @@ export default function CampaignDetail() {
                           <p className="text-sm text-gray-600 mb-1">"{contribution.message}"</p>
                         )}
                         <p className="text-xs text-gray-500">
-                          {new Date(contribution.createdAt).toLocaleDateString()}
+                          {formatDate(contribution.createdAt)}
                         </p>
                       </div>
                     </div>
@@ -309,22 +574,27 @@ export default function CampaignDetail() {
               <div className="space-y-4">
                 <div>
                   <div className="flex justify-between items-center mb-2">
-                    <span className="text-2xl font-bold text-gray-900">
-                      {campaign.raisedAmount.toLocaleString()} {campaign.currency}
-                    </span>
-                    <span className="text-sm text-gray-600">
-                      {progressPercentage.toFixed(1)}%
-                    </span>
+                    <p className="text-2xl font-bold text-gray-900">
+                      {formatCurrency(campaign.raisedAmount, campaign.currency)}
+                    </p>
+                    <div className="flex items-center text-gray-600">
+                      <Calendar className="h-5 w-5 mr-2" />
+                      <span>{daysLeft} days left</span>
+                    </div>
                   </div>
                   <p className="text-gray-600 mb-3">
-                    raised of {(campaign.goalAmount || campaign.targetAmount).toLocaleString()} {campaign.currency} goal
+                    raised of {formatCurrency(campaign.goalAmount || campaign.targetAmount, campaign.currency)} goal
                   </p>
                   
-                  <div className="w-full bg-gray-200 rounded-full h-3">
-                    <div 
-                      className="bg-blue-600 h-3 rounded-full transition-all duration-300" 
+                  <div className="w-full bg-gray-200 rounded-full h-2.5">
+                    <div
+                      className="bg-blue-600 h-2.5 rounded-full"
                       style={{ width: `${progressPercentage}%` }}
                     ></div>
+                  </div>
+                  <div className="flex justify-between text-sm text-gray-600 mt-1">
+                    <span>{progressPercentage}% funded</span>
+                    <span>{campaignContributions.length} contributions</span>
                   </div>
                 </div>
 
@@ -333,7 +603,7 @@ export default function CampaignDetail() {
                     <div className="flex items-center justify-center mb-2">
                       <Users className="w-5 h-5 text-gray-600 mr-1" />
                     </div>
-                    <p className="text-2xl font-bold text-gray-900">{campaign.contributions.length}</p>
+                    <p className="text-2xl font-bold text-gray-900">{campaignContributions.length}</p>
                     <p className="text-sm text-gray-600">contributors</p>
                   </div>
                   
@@ -354,18 +624,18 @@ export default function CampaignDetail() {
             {campaign.status === 'active' && (
               <div className="space-y-3">
                 <button
-                  onClick={() => setShowContributeForm(true)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white py-4 px-6 rounded-lg font-semibold transition-colors flex items-center justify-center"
+                  onClick={handleContributeClick}
+                  className="w-full bg-blue-600 text-white py-3 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center"
                 >
                   <Heart className="w-5 h-5 mr-2" />
-                  Contribute to this Cause
+                  Contribute Now
                 </button>
                 
                 {/* Withdrawal Button - Only for campaign owners */}
                 {user && user.id === campaign.creatorId && campaign.raisedAmount > 0 && (
                   <button
                     onClick={() => setShowWithdrawForm(true)}
-                    className="w-full bg-green-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center justify-center"
+                    className="w-full bg-green-600 text-white py-3 px-6 rounded-lg hover:bg-green-700 transition-colors flex items-center justify-center"
                   >
                     <Wallet className="w-5 h-5 mr-2" />
                     Withdraw Funds
@@ -399,7 +669,7 @@ export default function CampaignDetail() {
                     </div>
                   )}
 
-                  <form onSubmit={handleContribute} className="space-y-4">
+                  <form onSubmit={handleContributionSubmit} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Your Name *
@@ -563,14 +833,14 @@ export default function CampaignDetail() {
 
                   <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-700">
-                      <strong>Available to withdraw:</strong> {campaign.raisedAmount.toLocaleString()} {campaign.currency}
+                      <strong>Available to withdraw:</strong> {formatCurrency(campaign.raisedAmount, campaign.currency)}
                     </p>
                     <p className="text-xs text-blue-600 mt-1">
                       Withdrawal limits: 1 - 5,000 MZN per transaction
                     </p>
                   </div>
 
-                  <form onSubmit={handleWithdraw} className="space-y-4">
+                  <form onSubmit={handleWithdrawalSubmit} className="space-y-4">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">
                         Phone Number *
@@ -665,25 +935,23 @@ export default function CampaignDetail() {
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Status:</span>
-                  <span className={`font-medium ${
-                    campaign.status === 'active' ? 'text-green-600' : 
-                    campaign.status === 'completed' ? 'text-blue-600' : 'text-gray-600'
-                  }`}>
-                    {campaign.status.charAt(0).toUpperCase() + campaign.status.slice(1)}
-                  </span>
+                  <div className="flex items-center text-gray-600">
+                    <AlertCircle className="h-5 w-5 mr-2 text-yellow-500" />
+                    <span className="capitalize">{campaign.status || 'active'}</span>
+                  </div>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Created:</span>
-                  <span className="text-gray-900">
-                    {new Date(campaign.createdAt).toLocaleDateString()}
-                  </span>
+                  <p className="text-sm text-gray-900">
+                    {formatDate(campaign.createdAt)}
+                  </p>
                 </div>
                 {campaign.endDate && (
                   <div className="flex justify-between">
                     <span className="text-gray-600">Ends:</span>
-                    <span className="text-gray-900">
-                      {new Date(campaign.endDate).toLocaleDateString()}
-                    </span>
+                    <p className="text-sm text-gray-600">
+                      {formatDate(campaign.endDate)}
+                    </p>
                   </div>
                 )}
               </div>

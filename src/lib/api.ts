@@ -1,5 +1,5 @@
 // Demo API Service - No real backend calls
-const API_BASE_URL = '/api';
+const API_BASE_URL = 'http://localhost:5000/api';
 
 // Define interfaces
 interface UserProfile {

@@ -80,6 +80,8 @@ function AppContent() {
         <Route path="/send" element={<Navigate to="/send-money" replace />} />
         <Route path="/fundraising" element={<Fundraising />} />
         <Route path="/fundraising/campaign/:campaignId" element={<CampaignDetail />} />
+        {/* Redirect old campaign URL pattern to new one */}
+        <Route path="/campaign/:campaignId" element={<Navigate to="/fundraising/campaign/:campaignId" replace />} />
         <Route path="/fundraise" element={<Navigate to="/fundraising" replace />} />
         <Route path="/create-campaign" element={<CreateCampaign />} />
         <Route path="/profile" element={<ProfilePage />}>

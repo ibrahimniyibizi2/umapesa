@@ -63,21 +63,18 @@ const CreateCampaign = () => {
         throw new Error('File is too large. Maximum size is 5MB.');
       }
       
-      // For now, create a local URL for the file to display a preview
-      // In a real app, you would upload this to a server and get back a URL
+      // Create a local URL for the file to display a preview
       const imageUrl = URL.createObjectURL(file);
       console.log('Created local URL for file:', imageUrl);
+      
+      // Store the file in the component state so we can upload it later with the form
+      setSelectedFile(file);
       
       // Set the image URL in the form data
       setFormData(prev => ({
         ...prev,
-        imageUrl: file.name // Store the file name as a placeholder
-        // In a real app, you would store the actual URL from your server
-        // imageUrl: `https://your-api.com/uploads/${file.name}`
+        imageUrl: imageUrl // Store the data URL for preview
       }));
-      
-      // Store the file in the component state so we can upload it later with the form
-      setSelectedFile(file);
       
       return imageUrl;
     } catch (error) {
@@ -160,18 +157,32 @@ const CreateCampaign = () => {
         throw new Error(error);
       }
 
-      // In a real app, you would upload the file here and get a URL
-      // For now, we'll just use the file name as a placeholder
-      let imageUrl = '';
+      let imageUrl = formData.imageUrl; // Use the preview URL as a fallback
+      
+      // Upload the file if one was selected
       if (selectedFile) {
-        // Simulate file upload
-        console.log('Would upload file:', selectedFile.name);
-        // In a real app, you would do something like:
-        // const uploadResponse = await uploadFile('https://your-api.com/upload', selectedFile);
-        // imageUrl = uploadResponse.url;
-        
-        // For now, just use a placeholder
-        imageUrl = `https://placeholder.com/${selectedFile.name}`;
+        try {
+          const formData = new FormData();
+          formData.append('image', selectedFile);
+          
+          const uploadResponse = await fetch('http://localhost:5000/api/campaigns/upload', {
+            method: 'POST',
+            body: formData,
+          });
+          
+          if (!uploadResponse.ok) {
+            const errorData = await uploadResponse.json().catch(() => ({}));
+            throw new Error(errorData.message || 'Failed to upload image');
+          }
+          
+          const { filePath } = await uploadResponse.json();
+          imageUrl = filePath;
+          console.log('Image uploaded successfully:', imageUrl);
+          
+        } catch (uploadError) {
+          console.error('Error uploading image:', uploadError);
+          throw new Error('Failed to upload image. Please try again.');
+        }
       }
 
       const campaignData = {
@@ -180,7 +191,7 @@ const CreateCampaign = () => {
         goalAmount: Number(formData.goalAmount),
         currency: formData.currency,
         endDate: formData.endDate,
-        imageUrl: imageUrl || formData.imageUrl,
+        imageUrl: imageUrl,
         withdrawalNumber: formData.withdrawalNumber,
         withdrawalMethod: formData.withdrawalMethod as 'm-pesa' | 'airtel-money' | 'mpamba'
       };
