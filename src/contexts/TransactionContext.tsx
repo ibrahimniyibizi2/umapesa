@@ -113,9 +113,33 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
         
         // Load user transactions if logged in
         if (user?.id) {
-          const txResult = await ApiService.getUserTransactions();
-          if (txResult.success && Array.isArray(txResult.transactions)) {
-            setTransactions(txResult.transactions);
+          try {
+            const txResult = await ApiService.getUserTransactions();
+            if (txResult.success && Array.isArray(txResult.transactions)) {
+              // Store transactions in state
+              setTransactions(txResult.transactions);
+              
+              // Also store in local storage as fallback
+              if (txResult.transactions.length > 0) {
+                localStorage.setItem(
+                  `user_${user.id}_transactions`,
+                  JSON.stringify(txResult.transactions)
+                );
+              }
+              
+              if (txResult.isFallback) {
+                console.warn(txResult.message || 'Using fallback transaction data');
+              }
+            } else {
+              console.warn('No transactions data received:', txResult);
+            }
+          } catch (error) {
+            console.error('Error loading transactions:', error);
+            // Try to load from local storage as last resort
+            const storedTransactions = localStorage.getItem(`user_${user.id}_transactions`);
+            if (storedTransactions) {
+              setTransactions(JSON.parse(storedTransactions));
+            }
           }
         }
       } catch (error) {
@@ -146,6 +170,67 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     [exchangeRates]
   );
 
+  const createCampaign = useCallback(async (data: {
+    title: string;
+    description: string;
+    goalAmount: number;
+    currency: 'MZN' | 'RWF';
+    endDate?: string;
+    imageUrl?: string;
+    withdrawalNumber: string;
+    withdrawalMethod: string;
+  }): Promise<{ success: boolean; campaignId?: string; error?: string }> => {
+    try {
+      setLoading(true);
+      
+      // Call the API to create the campaign
+      const response = await ApiService.createCampaign({
+        ...data,
+        goalAmount: Number(data.goalAmount),
+        endDate: data.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      });
+
+      if (response.success) {
+        // Create a new campaign object with the response data
+        const newCampaign: Campaign = {
+          id: response.data?.id || `campaign-${Date.now()}`,
+          title: data.title,
+          description: data.description,
+          targetAmount: data.goalAmount,
+          currency: data.currency,
+          creatorId: user?.id || '',
+          creatorName: user ? `${user.firstName} ${user.lastName}` : 'Anonymous',
+          raisedAmount: 0,
+          startDate: new Date().toISOString(),
+          endDate: data.endDate || new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+          status: 'active',
+          contributions: [],
+          imageUrl: data.imageUrl || undefined,
+          withdrawalNumber: data.withdrawalNumber,
+          withdrawalMethod: data.withdrawalMethod as 'm-pesa' | 'airtel-money' | 'mpamba',
+          createdAt: new Date().toISOString()
+        };
+
+        // Update the local state with the new campaign
+        setCampaigns(prevCampaigns => [newCampaign, ...prevCampaigns]);
+        
+        return { success: true, campaignId: newCampaign.id };
+      } else {
+        throw new Error(response.error || 'Failed to create campaign');
+      }
+    } catch (error) {
+      console.error('Error creating campaign:', error);
+      return { 
+        success: false, 
+        error: error instanceof Error ? error.message : 'Failed to create campaign' 
+      };
+    } finally {
+      setLoading(false);
+    }
+  }, [user]);
+
+  // Remove the duplicate createCampaign function
+
   const updateTransactionStatus = useCallback(async (
     transactionId: string,
     status: Transaction['status'],
@@ -175,56 +260,6 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   const getCampaignById = useCallback((id: string): Campaign | null => {
     return campaigns.find(c => c.id === id) || null;
   }, [campaigns]);
-
-  const createCampaign = useCallback(async (data: {
-    title: string;
-    description: string;
-    targetAmount: number;
-    currency: 'MZN' | 'RWF';
-    endDate: string;
-    imageUrl?: string;
-  }): Promise<string | null> => {
-    if (!user) return null;
-
-    try {
-      setLoading(true);
-      const result = await ApiService.createCampaign({
-        title: data.title,
-        description: data.description,
-        goalAmount: data.targetAmount,
-        currency: data.currency,
-        endDate: data.endDate,
-        imageUrl: data.imageUrl,
-        withdrawalNumber: '', // These should be provided by the user
-        withdrawalMethod: 'bank_transfer' // Default value, should be configurable
-      });
-
-      if (result.success) {
-        const newCampaign: Campaign = {
-          ...data,
-          id: result.campaignId,
-          creatorId: typedUser?.id || '',
-          creatorName: typedUser?.firstName || '',
-          raisedAmount: 0,
-          startDate: new Date().toISOString(),
-          status: 'active',
-          contributions: [],
-          createdAt: new Date().toISOString(),
-          imageUrl: data.imageUrl
-        };
-
-        setCampaigns(prev => [newCampaign, ...prev]);
-        return result.campaignId;
-      }
-      return null;
-    } catch (error) {
-      console.error('Error creating campaign:', error);
-      setError(error instanceof Error ? error.message : 'Failed to create campaign');
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  }, [user, typedUser?.id, typedUser?.firstName]);
 
   const contributeToCampaign = useCallback(async (
     campaignId: string,
@@ -407,7 +442,7 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
   }, [user, exchangeRates, typedUser?.id]);
 
   // Create context value with all the functions and state
-  const contextValue: TransactionContextType = {
+  const contextValue: TransactionContextType = useMemo(() => ({
     transactions,
     campaigns,
     exchangeRates,
@@ -422,8 +457,22 @@ export const TransactionProvider: React.FC<TransactionProviderProps> = ({ childr
     calculateFee,
     convertCurrency,
     updateTransactionStatus,
-    updateCampaignContribution
-  };
+    updateCampaignContribution,
+  }), [
+    transactions,
+    campaigns,
+    exchangeRates,
+    loading,
+    error,
+    sendMoney,
+    createCampaign,
+    contributeToCampaign,
+    getCampaignById,
+    calculateFee,
+    convertCurrency,
+    updateTransactionStatus,
+    updateCampaignContribution,
+  ]);
 
   return (
     <TransactionContext.Provider value={contextValue}>

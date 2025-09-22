@@ -1,29 +1,97 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { CheckCircle, Heart } from 'lucide-react';
-import ApiService from '../../lib/api';
-import { useAuth } from '../../hooks/useAuth';
+import { CheckCircle } from 'lucide-react';
+import { useTransactions } from '../../hooks/useTransactions';
+
+interface CampaignFormData {
+  title: string;
+  description: string;
+  goalAmount: string;
+  currency: 'MZN' | 'RWF';
+  withdrawalNumber: string;
+  withdrawalMethod: string;
+  endDate: string;
+  imageUrl: string;
+}
 
 const CreateCampaign = () => {
   const navigate = useNavigate();
-  useAuth();
+  const { createCampaign } = useTransactions();
+  const [isDragging, setIsDragging] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [formData, setFormData] = useState({
+  
+  const [formData, setFormData] = useState<CampaignFormData>({
     title: '',
     description: '',
     goalAmount: '',
-    currency: 'MZN' as 'MZN' | 'RWF',
-    withdrawalNumber: '',
-    withdrawalMethod: '',
+    currency: 'MZN',
     endDate: '',
-    imageUrl: ''
+    imageUrl: '',
+    withdrawalNumber: '',
+    withdrawalMethod: 'm-pesa'
   });
-  
+
+  // We're not using useFileUpload hook anymore as we're handling files directly
+  const resetImageUpload = useCallback(() => {
+    setSelectedFile(null);
+    setFormData(prev => ({
+      ...prev,
+      imageUrl: ''
+    }));
+  }, []);
+
+  // Handle file upload
+  const handleFileChange = useCallback(async (file: File) => {
+    try {
+      setError('');
+      console.log('Uploading file:', file.name, file.type, file.size);
+      
+      // Check file type
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        throw new Error('Invalid file type. Please upload a JPEG, PNG, or WebP image.');
+      }
+      
+      // Check file size (5MB max)
+      const maxSize = 5 * 1024 * 1024; // 5MB in bytes
+      if (file.size > maxSize) {
+        throw new Error('File is too large. Maximum size is 5MB.');
+      }
+      
+      // For now, create a local URL for the file to display a preview
+      // In a real app, you would upload this to a server and get back a URL
+      const imageUrl = URL.createObjectURL(file);
+      console.log('Created local URL for file:', imageUrl);
+      
+      // Set the image URL in the form data
+      setFormData(prev => ({
+        ...prev,
+        imageUrl: file.name // Store the file name as a placeholder
+        // In a real app, you would store the actual URL from your server
+        // imageUrl: `https://your-api.com/uploads/${file.name}`
+      }));
+      
+      // Store the file in the component state so we can upload it later with the form
+      setSelectedFile(file);
+      
+      return imageUrl;
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process image';
+      console.error('Error processing file:', error);
+      setError(errorMessage);
+      setFormData(prev => ({
+        ...prev,
+        imageUrl: ''
+      }));
+      return null;
+    }
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -32,304 +100,411 @@ const CreateCampaign = () => {
     }));
   };
 
-  const handleClickUpload = () => {
-    fileInputRef.current?.click();
-  };
+  // Handle file drop
+  const handleDrop = useCallback(async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    setIsDragging(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      await handleFileChange(e.dataTransfer.files[0]);
+    }
+  }, [handleFileChange]);
 
-  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+  // Handle drag over
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setIsDragging(true);
-  };
+  }, []);
 
-  const handleDragLeave = () => {
+  // Handle drag leave
+  const handleDragLeave = useCallback(() => {
     setIsDragging(false);
-  };
+  }, []);
 
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  };
+  // Handle click to upload
+  const handleClickUpload = useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
 
-  const handleFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setError('Please upload a valid image file (PNG, JPG, GIF)');
-      return;
+  const validateForm = useCallback((): { isValid: boolean; error: string } => {
+    if (!formData.title.trim()) return { isValid: false, error: 'Title is required' };
+    if (!formData.description.trim()) return { isValid: false, error: 'Description is required' };
+    if (!formData.goalAmount) return { isValid: false, error: 'Goal amount is required' };
+    if (isNaN(Number(formData.goalAmount)) || Number(formData.goalAmount) <= 0) {
+      return { isValid: false, error: 'Please enter a valid goal amount' };
     }
-
-    if (file.size > 5 * 1024 * 1024) {
-      setError('File size must be under 5MB');
-      return;
+    if (!formData.endDate) return { isValid: false, error: 'End date is required' };
+    if (new Date(formData.endDate).getTime() <= new Date().getTime()) {
+      return { isValid: false, error: 'End date must be in the future' };
     }
-
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      const preview = reader.result as string;
-      setPreviewUrl(preview);
-      setFormData(prev => ({ ...prev, imageUrl: preview }));
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const removeImage = () => {
-    setPreviewUrl(null);
-    setFormData(prev => ({ ...prev, imageUrl: '' }));
-    setError('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+    if (!formData.currency) return { isValid: false, error: 'Currency is required' };
+    if (!formData.withdrawalNumber.trim()) {
+      return { isValid: false, error: 'Withdrawal number is required' };
     }
-  };
+    if (!formData.withdrawalMethod) {
+      return { isValid: false, error: 'Withdrawal method is required' };
+    }
+    if (!formData.imageUrl) return { isValid: false, error: 'Please upload a campaign image' };
+    
+    return { isValid: true, error: '' };
+  }, [formData]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    
+
     try {
-      // Validate required fields
-      if (!formData.title || !formData.description || !formData.goalAmount || !formData.withdrawalNumber || !formData.withdrawalMethod) {
-        throw new Error('Please fill in all required fields');
+      // Validate form data
+      const { isValid, error } = validateForm();
+      if (!isValid) {
+        throw new Error(error);
       }
 
-      await ApiService.createCampaign({
+      // In a real app, you would upload the file here and get a URL
+      // For now, we'll just use the file name as a placeholder
+      let imageUrl = '';
+      if (selectedFile) {
+        // Simulate file upload
+        console.log('Would upload file:', selectedFile.name);
+        // In a real app, you would do something like:
+        // const uploadResponse = await uploadFile('https://your-api.com/upload', selectedFile);
+        // imageUrl = uploadResponse.url;
+        
+        // For now, just use a placeholder
+        imageUrl = `https://placeholder.com/${selectedFile.name}`;
+      }
+
+      const campaignData = {
         title: formData.title,
         description: formData.description,
         goalAmount: Number(formData.goalAmount),
         currency: formData.currency,
-        endDate: formData.endDate || undefined,
-        imageUrl: formData.imageUrl || undefined,
+        endDate: formData.endDate,
+        imageUrl: imageUrl || formData.imageUrl,
         withdrawalNumber: formData.withdrawalNumber,
-        withdrawalMethod: formData.withdrawalMethod
+        withdrawalMethod: formData.withdrawalMethod as 'm-pesa' | 'airtel-money' | 'mpamba'
+      };
+
+      console.log('Submitting campaign data:', campaignData);
+
+      // Submit campaign data using the context
+      const response = await createCampaign({
+        title: campaignData.title,
+        description: campaignData.description,
+        goalAmount: campaignData.goalAmount,
+        currency: campaignData.currency,
+        endDate: campaignData.endDate,
+        imageUrl: campaignData.imageUrl,
+        withdrawalNumber: campaignData.withdrawalNumber,
+        withdrawalMethod: campaignData.withdrawalMethod
       });
+
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to create campaign');
+      }
       
       setSuccess(true);
+      setSuccessMessage('Campaign created successfully!');
+      
+      // Reset form after successful submission
+      setFormData({
+        title: '',
+        description: '',
+        goalAmount: '',
+        currency: 'MZN',
+        endDate: '',
+        imageUrl: '',
+        withdrawalNumber: '',
+        withdrawalMethod: 'm-pesa'
+      });
+      
+      // Reset the image upload
+      resetImageUpload();
+      
+      // Navigate to the fundraising page
+      console.log('Campaign created successfully, redirecting to:', '/fundraising');
+      navigate('/fundraising');
     } catch (err) {
-      console.error('Error creating campaign:', err);
-      setError(err instanceof Error ? err.message : 'Failed to create campaign. Please try again.');
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create campaign';
+      console.error('Error creating campaign:', errorMessage);
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
-  };
+  }, [createCampaign, formData, navigate, resetImageUpload, validateForm, selectedFile]);
 
   if (success) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
-        <div className="text-center max-w-md">
-          <div className="bg-white p-8 rounded-xl shadow-sm border border-green-200">
-            <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
-              <CheckCircle className="h-6 w-6 text-green-600" />
-            </div>
-            <h2 className="text-2xl font-bold text-gray-900 mb-2">Campaign Created Successfully!</h2>
-            <p className="text-gray-600 mb-6">Thank you for creating your fundraising campaign.</p>
-            <button
-              onClick={() => navigate('/fundraising')}
-              className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Back to Fundraising
-            </button>
+      <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-50">
+        <div className="bg-white p-8 rounded-lg shadow-md max-w-md w-full text-center">
+          <div className="flex justify-center mb-4">
+            <CheckCircle className="h-12 w-12 text-green-500" />
           </div>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Campaign Created Successfully!</h1>
+          <p className="text-gray-600 mb-6">Your campaign is now live and ready to receive contributions.</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 transition-colors"
+          >
+            Create Another Campaign
+          </button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-8 px-4 flex flex-col items-center">
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-8">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-            <Heart className="w-5 h-5 mr-2" />
-            Campaign Details
-          </h3>
-          <form onSubmit={handleSubmit}>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Campaign Title *
-                </label>
-                <input
-                  type="text"
-                  name="title"
-                  value={formData.title}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
-              </div>
+    <div className="min-h-screen bg-gray-50 py-8 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-extrabold text-gray-900">Create a Fundraising Campaign</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Fill out the form below to create your campaign and start raising funds
+          </p>
+        </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Description *
-                </label>
-                <textarea
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  rows={4}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                />
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-400 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <svg className="h-5 w-5 text-red-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
               </div>
+              <div className="ml-3">
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Goal Amount *
-                  </label>
+        {successMessage && (
+          <div className="bg-green-50 border-l-4 border-green-400 p-4 mb-6">
+            <div className="flex">
+              <div className="flex-shrink-0">
+                <CheckCircle className="h-5 w-5 text-green-400" />
+              </div>
+              <div className="ml-3">
+                <p className="text-sm text-green-700">{successMessage}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6 bg-white shadow overflow-hidden sm:rounded-lg p-6">
+          <div>
+            <h2 className="text-lg font-medium text-gray-900">Campaign Information</h2>
+            <p className="mt-1 text-sm text-gray-500">Basic information about your campaign</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="title" className="block text-sm font-medium text-gray-700">
+                Campaign Title *
+              </label>
+              <input
+                type="text"
+                name="title"
+                id="title"
+                value={formData.title}
+                onChange={handleChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="E.g., Help Build a School in Rural Area"
+                required
+              />
+            </div>
+
+            <div>
+              <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                Description *
+              </label>
+              <textarea
+                id="description"
+                name="description"
+                rows={4}
+                value={formData.description}
+                onChange={handleChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder="Tell your story and explain why you're raising funds"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label htmlFor="goalAmount" className="block text-sm font-medium text-gray-700">
+                  Goal Amount *
+                </label>
+                <div className="mt-1 relative rounded-md shadow-sm">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <span className="text-gray-500 sm:text-sm">
+                      {formData.currency === 'MZN' ? 'MZN' : 'RWF'}
+                    </span>
+                  </div>
                   <input
                     type="number"
                     name="goalAmount"
+                    id="goalAmount"
                     value={formData.goalAmount}
                     onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    min="1"
+                    step="1"
+                    className="focus:ring-blue-500 focus:border-blue-500 block w-full pl-16 pr-12 sm:text-sm border-gray-300 rounded-md"
+                    placeholder="0.00"
                     required
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Currency *
-                  </label>
-                  <select
-                    name="currency"
-                    value={formData.currency}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="MZN">MZN</option>
-                    <option value="RWF">RWF</option>
-                  </select>
-                </div>
               </div>
 
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Withdrawal Number *
-                  </label>
-                  <input
-                    type="text"
-                    name="withdrawalNumber"
-                    value={formData.withdrawalNumber}
-                    onChange={handleChange}
-                    placeholder="Your mobile money or bank account number"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Withdrawal Method *
-                  </label>
-                  <select
-                    name="withdrawalMethod"
-                    value={formData.withdrawalMethod}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                    required
-                  >
-                    <option value="">Select withdrawal method</option>
-                    <option value="mobile_money">Mobile Money</option>
-                    <option value="bank_transfer">Bank Transfer</option>
-                  </select>
-                </div>
+              <div>
+                <label htmlFor="currency" className="block text-sm font-medium text-gray-700">
+                  Currency *
+                </label>
+                <select
+                  id="currency"
+                  name="currency"
+                  value={formData.currency}
+                  onChange={handleChange}
+                  className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                  required
+                >
+                  <option value="MZN">Mozambican Metical (MZN)</option>
+                  <option value="RWF">Rwandan Franc (RWF)</option>
+                </select>
               </div>
+            </div>
 
-              <div className="mt-8">
-                <h3 className="text-lg font-semibold text-gray-900 mb-4">Campaign Image</h3>
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-center w-full">
-                    <div 
-                      className={`flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-colors ${
-                        isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 bg-gray-50 hover:bg-gray-100'
-                      }`}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      onClick={handleClickUpload}
-                    >
-                      <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                        <svg className="w-8 h-8 mb-4 text-gray-500" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
-                          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
-                        </svg>
-                        <p className="mb-2 text-sm text-gray-500">
-                          <span className="font-semibold">Click to upload</span> or drag and drop
-                        </p>
-                        <p className="text-xs text-gray-500">PNG, JPG, GIF (MAX. 5MB)</p>
-                      </div>
-                      <input 
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={handleFileInputChange}
-                        className="hidden"
-                      />
-                    </div>
-                  </div>
+            <div>
+              <label htmlFor="endDate" className="block text-sm font-medium text-gray-700">
+                End Date *
+              </label>
+              <input
+                type="date"
+                name="endDate"
+                id="endDate"
+                value={formData.endDate}
+                onChange={handleChange}
+                min={new Date().toISOString().split('T')[0]}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                required
+              />
+              <p className="mt-1 text-xs text-gray-500">
+                When would you like to end your fundraising campaign?
+              </p>
+            </div>
 
-                  {previewUrl && (
-                    <div className="relative w-full h-32 rounded-lg overflow-hidden">
-                      <img src={previewUrl} alt="Preview" className="w-full h-full object-cover" />
-                      <button
-                        type="button"
-                        title="Remove Image"
-                        onClick={removeImage}
-                        className="absolute top-2 right-2 bg-red-500 text-white rounded-full p-1 hover:bg-red-600"
-                      >
-                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                          <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
-                        </svg>
-                      </button>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Campaign Image *
+              </label>
+              <div className="flex items-center justify-center w-full">
+                <div 
+                  className={`border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors w-full ${
+                    isDragging ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:border-blue-400'
+                  }`}
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  onClick={handleClickUpload}
+                >
+                  <svg className="w-8 h-8 mb-4 text-gray-500 mx-auto" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 20 16">
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 13h3a3 3 0 0 0 0-6h-.025A5.56 5.56 0 0 0 16 6.5 5.5 5.5 0 0 0 5.207 5.021C5.137 5.017 5.071 5 5 5a4 4 0 0 0 0 8h2.167M10 15V6m0 0L8 8m2-2 2 2"/>
+                  </svg>
+                  <p className="mb-2 text-sm text-gray-500">
+                    <span className="font-semibold">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-gray-500 mb-2">PNG, JPG, WEBP (MAX. 5MB)</p>
+                  {formData.imageUrl && (
+                    <div className="mt-2 text-sm text-green-600">
+                      Image selected successfully!
                     </div>
                   )}
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    className="hidden"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={async (e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        await handleFileChange(e.target.files[0]);
+                        // Reset the input value to allow selecting the same file again
+                        e.target.value = '';
+                      }
+                    }}
+                  />
                 </div>
               </div>
-
-              {error && (
-                <div className="p-3 bg-red-50 text-red-700 rounded-lg text-sm">
-                  {error}
-                </div>
+              {error && formData.imageUrl === '' && (
+                <p className="mt-2 text-sm text-red-600">{error}</p>
               )}
+            </div>
+          </div>
 
+          <div className="pt-6 border-t border-gray-200">
+            <h2 className="text-lg font-medium text-gray-900">Withdrawal Information</h2>
+            <p className="mt-1 text-sm text-gray-500">How would you like to receive the funds?</p>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="withdrawalMethod" className="block text-sm font-medium text-gray-700">
+                Withdrawal Method *
+              </label>
+              <select
+                id="withdrawalMethod"
+                name="withdrawalMethod"
+                value={formData.withdrawalMethod}
+                onChange={handleChange}
+                className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm rounded-md"
+                required
+              >
+                <option value="">Select withdrawal method</option>
+                <option value="mpesa">M-Pesa</option>
+                <option value="bank_transfer">Bank Transfer</option>
+                <option value="paypal">PayPal</option>
+              </select>
+            </div>
+
+            <div>
+              <label htmlFor="withdrawalNumber" className="block text-sm font-medium text-gray-700">
+                {formData.withdrawalMethod === 'mpesa' ? 'Phone Number' : 
+                 formData.withdrawalMethod === 'bank_transfer' ? 'Bank Account Number' : 'Email Address'} *
+              </label>
+              <input
+                type="text"
+                name="withdrawalNumber"
+                id="withdrawalNumber"
+                value={formData.withdrawalNumber}
+                onChange={handleChange}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
+                placeholder={formData.withdrawalMethod === 'mpesa' ? 'e.g., 84 123 4567' : 
+                              formData.withdrawalMethod === 'bank_transfer' ? 'Bank account number' : 'your@email.com'}
+                required
+              />
+            </div>
+          </div>
+
+          <div className="pt-5">
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                onClick={() => window.history.back()}
+              >
+                Cancel
+              </button>
               <button
                 type="submit"
-                className="w-full bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
                 disabled={loading}
+                className={`ml-3 inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white ${
+                  loading ? 'bg-blue-400' : 'bg-blue-600 hover:bg-blue-700'
+                } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
               >
-                {loading ? 'Creating Campaign...' : 'Create Campaign'}
+                {loading ? 'Creating...' : 'Create Campaign'}
               </button>
             </div>
-          </form>
-        </div>
-
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Tips for a Successful Campaign</h3>
-          <ul className="list-disc list-inside space-y-2">
-            <li className="text-gray-700">
-              <span className="font-semibold">Set a clear goal:</span> Define a specific amount of money you need to raise and what it will be used for.
-            </li>
-            <li className="text-gray-700">
-              <span className="font-semibold">Tell your story:</span> Share why you are raising funds and how it will impact your life or project.
-            </li>
-            <li className="text-gray-700">
-              <span className="font-semibold">Use high-quality images:</span> A clear and compelling image can make your campaign more appealing.
-            </li>
-            <li className="text-gray-700">
-              <span className="font-semibold">Promote your campaign:</span> Share it on social media, via email, and other channels to reach potential donors.
-            </li>
-            <li className="text-gray-700">
-              <span className="font-semibold">Thank your donors:</span> Show appreciation to those who contribute to your campaign.
-            </li>
-          </ul>
-        </div>
+          </div>
+        </form>
       </div>
     </div>
   );

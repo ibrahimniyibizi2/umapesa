@@ -12,6 +12,7 @@ import Register from './pages/Auth/Register';
 import SendMoney from './pages/Transfer/SendMoney';
 import Fundraising from './pages/Fundraising/Fundraising';
 import CreateCampaign from './pages/Fundraising/CreateCampaign';
+import CampaignDetail from './pages/Fundraising/CampaignDetail';
 import Menu from './pages/Menu/Menu';
 import TransactionHistory from './pages/Transfer/TransactionHistory';
 import TransactionStatus from './pages/TransactionStatus/TransactionStatus';
@@ -78,6 +79,7 @@ function AppContent() {
         <Route path="/send-money" element={<SendMoney />} />
         <Route path="/send" element={<Navigate to="/send-money" replace />} />
         <Route path="/fundraising" element={<Fundraising />} />
+        <Route path="/fundraising/campaign/:campaignId" element={<CampaignDetail />} />
         <Route path="/fundraise" element={<Navigate to="/fundraising" replace />} />
         <Route path="/create-campaign" element={<CreateCampaign />} />
         <Route path="/profile" element={<ProfilePage />}>

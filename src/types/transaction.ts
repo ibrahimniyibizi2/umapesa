@@ -39,6 +39,8 @@ export interface Transaction {
     status: 'active' | 'completed' | 'cancelled';
     isActive?: boolean; // For backward compatibility
     imageUrl?: string;
+    withdrawalNumber?: string;
+    withdrawalMethod?: 'm-pesa' | 'airtel-money' | 'mpamba';
     contributions: Contribution[];
     createdAt: string;
   }
@@ -80,11 +82,13 @@ export interface Transaction {
     createCampaign: (data: {
       title: string;
       description: string;
-      targetAmount: number;
+      goalAmount: number;
       currency: 'MZN' | 'RWF';
-      endDate: string;
+      endDate?: string;
       imageUrl?: string;
-    }) => Promise<string | null>;
+      withdrawalNumber: string;
+      withdrawalMethod: string;
+    }) => Promise<{ success: boolean; campaignId?: string; error?: string }>;
     contributeToCampaign: (campaignId: string, data: ContributionInput) => Promise<string | null>;
     getCampaignById: (id: string) => Campaign | null;
     calculateFee: (amount: number) => number;
